@@ -374,6 +374,7 @@ function applyPayload(data) {
     setConfidence(confPct);
 
     if (sign !== '—') {
+      if (window._signPillHideTimer) { clearTimeout(window._signPillHideTimer); window._signPillHideTimer = null; }
       el.signPill.style.display = 'flex';
       el.signPillText.textContent = sign;
       el.signPillSub.textContent = GESTURE_HINTS[sign] || 'gesture detected';
@@ -388,7 +389,13 @@ function applyPayload(data) {
       sampleCount++;
       el.statSamples.textContent = sampleCount;
     } else {
-      el.signPill.style.display = 'none';
+      // Keep sign visible for 3 seconds before hiding
+      if (!window._signPillHideTimer) {
+        window._signPillHideTimer = setTimeout(() => {
+          el.signPill.style.display = 'none';
+          window._signPillHideTimer = null;
+        }, 3000);
+      }
     }
   }
 

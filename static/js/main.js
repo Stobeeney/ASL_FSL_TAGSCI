@@ -986,18 +986,26 @@ async function importDataset(input) {
       alert('Invalid dataset file — expected a JSON array of records.');
       return;
     }
-    const res = await fetch('/api/dataset/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(records)
-    });
-    const data = await res.json();
-    if (data.ok) {
-      alert(`Imported ${data.imported} record${data.imported !== 1 ? 's' : ''} successfully.`);
-      loadDataset();
-    } else {
-      alert('Import failed: ' + (data.error || 'unknown error'));
+
+    const CHUNK_SIZE = 20;
+    let totalImported = 0;
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const chunk = records.slice(i, i + CHUNK_SIZE);
+      const res = await fetch('/api/dataset/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(chunk)
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        alert(`Import failed at batch ${Math.floor(i / CHUNK_SIZE) + 1}: ` + (data.error || 'unknown error'));
+        return;
+      }
+      totalImported += data.imported;
     }
+
+    alert(`Imported ${totalImported} record${totalImported !== 1 ? 's' : ''} successfully.`);
+    loadDataset();
   } catch (e) {
     alert('Import failed: ' + e.message);
   }

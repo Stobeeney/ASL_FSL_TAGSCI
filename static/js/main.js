@@ -562,7 +562,7 @@ function drawAirButton(bx, by, dwellPct, hovering) {
   ctx.font = `bold ${Math.round(r * 0.55)}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(isRec ? '■' : '▶', bx, by);
+  ctx.fillText(airDragging ? '✥' : (isRec ? '■' : '▶'), bx, by);
 
   // Label below button
   ctx.font = `bold 11px sans-serif`;
@@ -600,6 +600,82 @@ function speakAirSentence(sentence) {
     window.speechSynthesis.speak(utt);
   }
 }
+
+/* ═══════════════════════════════════════
+   AIR BUTTON DRAG
+   ═══════════════════════════════════════ */
+let airDragging = false;
+
+// Load saved position from previous session
+(function () {
+  try {
+    const saved = localStorage.getItem('airBtnPos');
+    if (saved) {
+      const { nx, ny } = JSON.parse(saved);
+      if (nx >= 0.03 && nx <= 0.97 && ny >= 0.03 && ny <= 0.97) {
+        AIR_BTN.nx = nx;
+        AIR_BTN.ny = ny;
+      }
+    }
+  } catch (e) { /* ignore */ }
+})();
+
+function _canvasCoords(e) {
+  const rect = canvasElement.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const mouseX = clientX - rect.left;
+  const mouseY = clientY - rect.top;
+  // Invert X to account for CSS scaleX(-1) flip on the canvas
+  const cx = ((rect.width - mouseX) / rect.width) * canvasElement.width;
+  const cy = (mouseY / rect.height) * canvasElement.height;
+  return { x: cx, y: cy };
+}
+
+function _nearAirButton(cx, cy) {
+  const bx = AIR_BTN.nx * canvasElement.width;
+  const by = AIR_BTN.ny * canvasElement.height;
+  return Math.hypot(cx - bx, cy - by) < AIR_BTN.radius + 14;
+}
+
+canvasElement.addEventListener('mousedown', e => {
+  const { x, y } = _canvasCoords(e);
+  if (_nearAirButton(x, y)) {
+    airDragging = true;
+    canvasElement.style.cursor = 'grabbing';
+    e.preventDefault();
+  }
+});
+
+canvasElement.addEventListener('mousemove', e => {
+  const { x, y } = _canvasCoords(e);
+  if (airDragging) {
+    AIR_BTN.nx = Math.max(0.03, Math.min(0.97, x / canvasElement.width));
+    AIR_BTN.ny = Math.max(0.03, Math.min(0.97, y / canvasElement.height));
+    localStorage.setItem('airBtnPos', JSON.stringify({ nx: AIR_BTN.nx, ny: AIR_BTN.ny }));
+  } else {
+    canvasElement.style.cursor = _nearAirButton(x, y) ? 'grab' : 'default';
+  }
+});
+
+canvasElement.addEventListener('mouseup', () => { airDragging = false; canvasElement.style.cursor = 'default'; });
+canvasElement.addEventListener('mouseleave', () => { airDragging = false; canvasElement.style.cursor = 'default'; });
+
+canvasElement.addEventListener('touchstart', e => {
+  const { x, y } = _canvasCoords(e);
+  if (_nearAirButton(x, y)) { airDragging = true; e.preventDefault(); }
+}, { passive: false });
+
+canvasElement.addEventListener('touchmove', e => {
+  if (!airDragging) return;
+  const { x, y } = _canvasCoords(e);
+  AIR_BTN.nx = Math.max(0.03, Math.min(0.97, x / canvasElement.width));
+  AIR_BTN.ny = Math.max(0.03, Math.min(0.97, y / canvasElement.height));
+  localStorage.setItem('airBtnPos', JSON.stringify({ nx: AIR_BTN.nx, ny: AIR_BTN.ny }));
+  e.preventDefault();
+}, { passive: false });
+
+canvasElement.addEventListener('touchend', () => { airDragging = false; });
 
 function onResults(results) {
   frameCount++;

@@ -591,11 +591,31 @@ def delete_named_model():
     if name == 'gesture_model.pkl':
         return jsonify({"ok": False, "error": "Cannot delete default model"}), 400
 
-    path = _model_path(name)
-    if os.path.exists(path):
-        os.remove(path)
+    deleted = False
+
+    # Delete from database
+    try:
+        conn = get_db_connection()
+        try:
+            execute_query(conn, "DELETE FROM trained_models WHERE name = ?", (name,), commit=True)
+            deleted = True
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[Models] DB delete error: {e}")
+
+    # Delete from disk (best effort — Vercel /var/task is read-only)
+    for candidate in [os.path.join('/tmp', name), os.path.join(_repo_dir, name)]:
+        if os.path.exists(candidate):
+            try:
+                os.remove(candidate)
+                deleted = True
+            except Exception:
+                pass
+
+    if deleted:
         return jsonify({"ok": True, "message": f"Deleted {name}"})
-    return jsonify({"ok": False, "error": "File not found"}), 404
+    return jsonify({"ok": False, "error": "Model not found"}), 404
 
 
 @app.route('/api/train', methods=['POST'])

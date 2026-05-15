@@ -89,6 +89,8 @@ const viewport = document.querySelector('.camera-viewport');
 /* ═══════════════════════════════════════
    TAB SWITCHING
    ═══════════════════════════════════════ */
+let _datasetAutoRefresh = null;
+
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -97,7 +99,13 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
     const panel = $(`panel-${tab}`);
     if (panel) panel.style.display = '';
-    if (tab === 'dataset') loadDataset();
+    if (tab === 'dataset') {
+      loadDataset();
+      if (_datasetAutoRefresh) clearInterval(_datasetAutoRefresh);
+      _datasetAutoRefresh = setInterval(loadDataset, 10000);
+    } else {
+      if (_datasetAutoRefresh) { clearInterval(_datasetAutoRefresh); _datasetAutoRefresh = null; }
+    }
     if (tab === 'model') {
       loadModelStats();
       loadModelList();

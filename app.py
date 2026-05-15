@@ -556,14 +556,26 @@ def _model_save_path(name):
 
 @app.route('/api/models/list')
 def list_models():
+    # Use DB as source of truth (works for both Vercel and localhost)
+    files = set()
+    try:
+        conn = get_db_connection()
+        try:
+            rows, _ = execute_query(conn, "SELECT name FROM trained_models")
+            files = {r[0] for r in rows}
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[Models] DB list error: {e}")
+
+    # Also include local /tmp files not yet in DB
     if os.environ.get('VERCEL'):
-        tmp_set = {f for f in os.listdir('/tmp') if f.endswith('.pkl')}
-        repo_set = {f for f in os.listdir(_repo_dir) if f.endswith('.pkl')}
-        files = sorted(tmp_set | repo_set)
+        files |= {f for f in os.listdir('/tmp') if f.endswith('.pkl')}
     else:
-        files = sorted(f for f in os.listdir(_repo_dir) if f.endswith('.pkl'))
+        files |= {f for f in os.listdir(_repo_dir) if f.endswith('.pkl')}
+
     current = os.path.basename(classifier.model_path)
-    return jsonify({"models": files, "current": current})
+    return jsonify({"models": sorted(files), "current": current})
 
 
 @app.route('/api/models/load', methods=['POST'])

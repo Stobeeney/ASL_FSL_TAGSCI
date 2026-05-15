@@ -57,6 +57,7 @@ let airDwellAccum = 0;
 let airDwellLast = 0;
 let airSentence = [];
 let airLastConfirmed = '—';
+let airHandDragging = false; // true while pinch-dragging with hand
 
 /* ── DOM refs ── */
 const $ = id => document.getElementById(id);
@@ -455,19 +456,59 @@ let frameCount = 0;
 function updateAirButton(handLandmarks) {
   const cw = canvasElement.width;
   const ch = canvasElement.height;
-  const bx = AIR_BTN.nx * cw;
-  const by = AIR_BTN.ny * ch;
   const now = performance.now();
 
-  // Index finger tip = landmark 8
   let hovering = false;
-  if (handLandmarks && handLandmarks[8]) {
-    const fx = handLandmarks[8].x * cw;
-    const fy = handLandmarks[8].y * ch;
-    hovering = Math.hypot(fx - bx, fy - by) < AIR_BTN.radius;
+  let pinching = false;
+  let pinchMidX = 0, pinchMidY = 0;
+
+  if (handLandmarks && handLandmarks[8] && handLandmarks[4]) {
+    const thumbX = handLandmarks[4].x * cw;
+    const thumbY = handLandmarks[4].y * ch;
+    const indexX = handLandmarks[8].x * cw;
+    const indexY = handLandmarks[8].y * ch;
+
+    pinchMidX = (thumbX + indexX) / 2;
+    pinchMidY = (thumbY + indexY) / 2;
+
+    // Hand size = wrist (0) to middle MCP (9) distance — normalises for depth
+    const handSize = Math.hypot(
+      (handLandmarks[0].x - handLandmarks[9].x) * cw,
+      (handLandmarks[0].y - handLandmarks[9].y) * ch
+    );
+    const pinchDist = Math.hypot(thumbX - indexX, thumbY - indexY);
+    pinching = pinchDist < handSize * 0.38;
+
+    const bx = AIR_BTN.nx * cw;
+    const by = AIR_BTN.ny * ch;
+    hovering = Math.hypot(indexX - bx, indexY - by) < AIR_BTN.radius * 1.5;
   }
 
-  // Dwell timer
+  const bx = AIR_BTN.nx * cw;
+  const by = AIR_BTN.ny * ch;
+
+  // ── Pinch-to-drag (Tony Stark mode) ──
+  if (pinching) {
+    const nearBtn = Math.hypot(pinchMidX - bx, pinchMidY - by) < AIR_BTN.radius * 3.5;
+    if (!airHandDragging && nearBtn) airHandDragging = true;
+    if (airHandDragging) {
+      AIR_BTN.nx = Math.max(0.03, Math.min(0.97, pinchMidX / cw));
+      AIR_BTN.ny = Math.max(0.03, Math.min(0.97, pinchMidY / ch));
+      drawPinchEffect(pinchMidX, pinchMidY);
+      drawAirButton(AIR_BTN.nx * cw, AIR_BTN.ny * ch, 0, false, true);
+      // Reset dwell so it doesn't fire on release
+      airDwellAccum = 0;
+      airDwellLast = 0;
+      return;
+    }
+  } else {
+    if (airHandDragging) {
+      localStorage.setItem('airBtnPos', JSON.stringify({ nx: AIR_BTN.nx, ny: AIR_BTN.ny }));
+    }
+    airHandDragging = false;
+  }
+
+  // ── Normal dwell / activate logic ──
   if (hovering) {
     if (airDwellLast > 0) airDwellAccum += now - airDwellLast;
     airDwellLast = now;
@@ -477,7 +518,6 @@ function updateAirButton(handLandmarks) {
   }
   const dwellPct = Math.min(airDwellAccum / AIR_BTN.dwellMs, 1.0);
 
-  // State transitions on full dwell
   if (dwellPct >= 1.0) {
     airDwellAccum = 0;
     if (airState === 'idle' || airState === 'dwelling_start') {
@@ -501,7 +541,6 @@ function updateAirButton(handLandmarks) {
     }
   }
 
-  // Collect confirmed signs while recording
   if (airState === 'recording' || airState === 'dwelling_stop') {
     const s = localState.sign;
     if (s !== '—' && s !== airLastConfirmed) {
@@ -511,23 +550,59 @@ function updateAirButton(handLandmarks) {
     }
   }
 
-  drawAirButton(bx, by, dwellPct, hovering);
+  drawAirButton(bx, by, dwellPct, hovering, false);
 }
 
-function drawAirButton(bx, by, dwellPct, hovering) {
+function drawPinchEffect(px, py) {
+  const ctx = canvasCtx;
+  const bx = AIR_BTN.nx * canvasElement.width;
+  const by = AIR_BTN.ny * canvasElement.height;
+
+  // Dashed tether line from pinch to button
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(bx, by);
+  ctx.strokeStyle = 'rgba(255,180,0,0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 5]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Pinch glow
+  const grd = ctx.createRadialGradient(px, py, 0, px, py, 18);
+  grd.addColorStop(0, 'rgba(255,180,0,0.65)');
+  grd.addColorStop(1, 'rgba(255,180,0,0)');
+  ctx.beginPath();
+  ctx.arc(px, py, 18, 0, Math.PI * 2);
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // Pinch dot
+  ctx.beginPath();
+  ctx.arc(px, py, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffb700';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawAirButton(bx, by, dwellPct, hovering, handDragging = false) {
   const ctx = canvasCtx;
   const r = AIR_BTN.radius;
   const isRec = airState === 'recording' || airState === 'dwelling_stop';
+  const isDragging = handDragging || airDragging;
 
   ctx.save();
 
   // Outer glow
-  if (hovering) {
-    const glow = ctx.createRadialGradient(bx, by, r, bx, by, r + 20);
-    glow.addColorStop(0, isRec ? 'rgba(255,60,60,0.4)' : 'rgba(0,245,212,0.3)');
+  if (hovering || isDragging) {
+    const glowColor = isDragging ? 'rgba(255,180,0,0.5)' : (isRec ? 'rgba(255,60,60,0.4)' : 'rgba(0,245,212,0.3)');
+    const glow = ctx.createRadialGradient(bx, by, r, bx, by, r + 22);
+    glow.addColorStop(0, glowColor);
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.beginPath();
-    ctx.arc(bx, by, r + 20, 0, Math.PI * 2);
+    ctx.arc(bx, by, r + 22, 0, Math.PI * 2);
     ctx.fillStyle = glow;
     ctx.fill();
   }
@@ -535,14 +610,14 @@ function drawAirButton(bx, by, dwellPct, hovering) {
   // Button fill
   ctx.beginPath();
   ctx.arc(bx, by, r, 0, Math.PI * 2);
-  ctx.fillStyle = isRec ? 'rgba(220,40,40,0.85)' : 'rgba(0,20,18,0.75)';
+  ctx.fillStyle = isDragging ? 'rgba(220,140,0,0.92)' : (isRec ? 'rgba(220,40,40,0.85)' : 'rgba(0,20,18,0.75)');
   ctx.fill();
-  ctx.strokeStyle = isRec ? '#ff4444' : '#00f5d4';
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = isDragging ? '#ffb700' : (isRec ? '#ff4444' : '#00f5d4');
+  ctx.lineWidth = isDragging ? 3 : 2.5;
   ctx.stroke();
 
-  // Dwell arc
-  if (dwellPct > 0 && dwellPct < 1) {
+  // Dwell arc (hidden while dragging)
+  if (!isDragging && dwellPct > 0 && dwellPct < 1) {
     ctx.beginPath();
     ctx.arc(bx, by, r + 7, -Math.PI / 2, -Math.PI / 2 + dwellPct * Math.PI * 2);
     ctx.strokeStyle = '#ffffff';
@@ -551,7 +626,7 @@ function drawAirButton(bx, by, dwellPct, hovering) {
     ctx.stroke();
   }
 
-  // All text is drawn in a locally-flipped context to cancel the CSS scaleX(-1)
+  // All text drawn in locally-flipped context to cancel CSS scaleX(-1)
   ctx.save();
   ctx.translate(bx, 0);
   ctx.scale(-1, 1);
@@ -562,15 +637,18 @@ function drawAirButton(bx, by, dwellPct, hovering) {
   ctx.font = `bold ${Math.round(r * 0.55)}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(airDragging ? '✥' : (isRec ? '■' : '▶'), bx, by);
+  ctx.fillText(isDragging ? '✥' : (isRec ? '■' : '▶'), bx, by);
 
   // Label below button
-  ctx.font = `bold 11px sans-serif`;
-  ctx.fillStyle = isRec ? '#ff9999' : '#00f5d4';
-  ctx.fillText(isRec ? 'HOVER TO STOP' : 'HOVER TO START', bx, by + r + 14);
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = isDragging ? '#ffb700' : (isRec ? '#ff9999' : '#00f5d4');
+  ctx.fillText(
+    isDragging ? 'MOVING…' : (isRec ? 'HOVER TO STOP' : 'HOVER TO START'),
+    bx, by + r + 14
+  );
 
   // Sentence preview above button
-  if ((airState === 'recording' || airState === 'dwelling_stop') && airSentence.length > 0) {
+  if (!isDragging && (airState === 'recording' || airState === 'dwelling_stop') && airSentence.length > 0) {
     const text = airSentence.join(' · ');
     ctx.font = 'bold 13px monospace';
     ctx.fillStyle = '#00f5d4';

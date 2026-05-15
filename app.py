@@ -81,7 +81,6 @@ def init_db():
     conn = get_db_connection()
     try:
         if IS_POSTGRES:
-            # PostgreSQL specific schema
             execute_query(conn, """
                 CREATE TABLE IF NOT EXISTS samples (
                     id           SERIAL PRIMARY KEY,
@@ -101,8 +100,12 @@ def init_db():
                     updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
                 )
             """, commit=True)
+            execute_query(conn, """
+                CREATE TABLE IF NOT EXISTS hidden_models (
+                    name TEXT PRIMARY KEY
+                )
+            """, commit=True)
         else:
-            # SQLite specific schema
             execute_query(conn, """
                 CREATE TABLE IF NOT EXISTS samples (
                     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,6 +124,11 @@ def init_db():
                     name         TEXT    NOT NULL UNIQUE,
                     data         BLOB    NOT NULL,
                     updated_at   TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+                )
+            """, commit=True)
+            execute_query(conn, """
+                CREATE TABLE IF NOT EXISTS hidden_models (
+                    name TEXT PRIMARY KEY
                 )
             """, commit=True)
     finally:
@@ -556,24 +564,27 @@ def _model_save_path(name):
 
 @app.route('/api/models/list')
 def list_models():
-    # Use DB as source of truth (works for both Vercel and localhost)
-    files = set()
+    db_models = set()
+    hidden = set()
     try:
         conn = get_db_connection()
         try:
             rows, _ = execute_query(conn, "SELECT name FROM trained_models")
-            files = {r[0] for r in rows}
+            db_models = {r[0] for r in rows}
+            hrows, _ = execute_query(conn, "SELECT name FROM hidden_models")
+            hidden = {r[0] for r in hrows}
         finally:
             conn.close()
     except Exception as e:
         print(f"[Models] DB list error: {e}")
 
-    # Also include local /tmp files not yet in DB
+    # Filesystem models (repo + /tmp on Vercel)
+    fs_models = set()
     if os.environ.get('VERCEL'):
-        files |= {f for f in os.listdir('/tmp') if f.endswith('.pkl')}
-    else:
-        files |= {f for f in os.listdir(_repo_dir) if f.endswith('.pkl')}
+        fs_models |= {f for f in os.listdir('/tmp') if f.endswith('.pkl')}
+    fs_models |= {f for f in os.listdir(_repo_dir) if f.endswith('.pkl')}
 
+    files = (db_models | fs_models) - hidden
     current = os.path.basename(classifier.model_path)
     return jsonify({"models": sorted(files), "current": current})
 
@@ -603,31 +614,34 @@ def delete_named_model():
     if name == 'gesture_model.pkl':
         return jsonify({"ok": False, "error": "Cannot delete default model"}), 400
 
-    deleted = False
-
-    # Delete from database
+    conn = get_db_connection()
     try:
-        conn = get_db_connection()
-        try:
-            execute_query(conn, "DELETE FROM trained_models WHERE name = ?", (name,), commit=True)
-            deleted = True
-        finally:
-            conn.close()
+        # Remove from trained_models (DB-stored models)
+        execute_query(conn, "DELETE FROM trained_models WHERE name = ?", (name,), commit=True)
+        # Add to hidden_models so filesystem-bundled .pkl files also disappear from list
+        if IS_POSTGRES:
+            execute_query(conn, """
+                INSERT INTO hidden_models (name) VALUES (?)
+                ON CONFLICT (name) DO NOTHING
+            """, (name,), commit=True)
+        else:
+            execute_query(conn, """
+                INSERT OR IGNORE INTO hidden_models (name) VALUES (?)
+            """, (name,), commit=True)
     except Exception as e:
         print(f"[Models] DB delete error: {e}")
+    finally:
+        conn.close()
 
     # Delete from disk (best effort — Vercel /var/task is read-only)
     for candidate in [os.path.join('/tmp', name), os.path.join(_repo_dir, name)]:
         if os.path.exists(candidate):
             try:
                 os.remove(candidate)
-                deleted = True
             except Exception:
                 pass
 
-    if deleted:
-        return jsonify({"ok": True, "message": f"Deleted {name}"})
-    return jsonify({"ok": False, "error": "Model not found"}), 404
+    return jsonify({"ok": True, "message": f"Deleted {name}"})
 
 
 @app.route('/api/train', methods=['POST'])

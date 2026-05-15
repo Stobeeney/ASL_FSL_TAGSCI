@@ -59,19 +59,19 @@
 
     <!-- ── LEFT SIDEBAR ── -->
     <aside class="sidebar sidebar--left">
-      <button class="side-btn active" title="Camera Feed">
+      <button class="side-btn active" id="sideCamBtn" title="Camera Feed" onclick="sideNav('live')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <rect x="2" y="7" width="20" height="15" rx="3" />
           <circle cx="12" cy="14.5" r="3.5" />
           <path d="M7 7V5a1 1 0 011-1h8a1 1 0 011 1v2" />
         </svg>
       </button>
-      <button class="side-btn" title="Hand Tracking">
+      <button class="side-btn active" id="sideHandsBtn" title="Hand Tracking (click to toggle)" onclick="sideToggleHands()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <path d="M8 3v7M11 5v5M14 4v6M17 6v4M8 10c0 0-2 1-2 4v3a4 4 0 008 0v-5" />
         </svg>
       </button>
-      <button class="side-btn" title="Face / Emotion">
+      <button class="side-btn active" id="sideFaceBtn" title="Face / Emotion (click to toggle)" onclick="sideToggleFace()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <circle cx="12" cy="12" r="9" />
           <path d="M8 14s1.5 2 4 2 4-2 4-2" />
@@ -80,14 +80,14 @@
         </svg>
       </button>
       <div class="side-divider"></div>
-      <button class="side-btn" title="Dataset">
+      <button class="side-btn" id="sideDatasetBtn" title="Dataset" onclick="sideNav('dataset')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <ellipse cx="12" cy="7" rx="8" ry="3" />
           <path d="M4 7v5c0 1.66 3.58 3 8 3s8-1.34 8-3V7" />
           <path d="M4 12v5c0 1.66 3.58 3 8 3s8-1.34 8-3v-5" />
         </svg>
       </button>
-      <button class="side-btn" title="Settings">
+      <button class="side-btn" id="sideSettingsBtn" title="Settings" onclick="sideToggleSettings()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <circle cx="12" cy="12" r="3" />
           <path
@@ -496,14 +496,22 @@
 
       <div class="rs-divider"></div>
 
-      <div class="rs-mode-toggle">
-        <button class="mode-btn active" id="modeASL" onclick="setMode('ASL')">ASL</button>
-        <button class="mode-btn" id="modeFSL" onclick="setMode('FSL')">FSL</button>
-      </div>
-
     </aside>
 
   </div><!-- /layout -->
+
+  <!-- Settings floating panel -->
+  <div id="sideSettingsPanel" style="display:none; position:fixed; left:52px; bottom:55px; background:#0d0f16; border:1px solid rgba(0,245,212,0.3); border-radius:10px; padding:14px 16px; z-index:200; min-width:180px; box-shadow:0 8px 32px rgba(0,0,0,0.7);">
+    <div style="font:700 10px 'Space Mono',monospace; color:#00f5d4; letter-spacing:0.1em; margin-bottom:12px;">SETTINGS</div>
+    <div style="font:600 10px 'Syne',sans-serif; color:rgba(226,230,240,0.5); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Recognition Mode</div>
+    <div class="rs-mode-toggle" style="margin:0 0 14px;">
+      <button class="mode-btn active" id="modeASL" onclick="setMode('ASL')">ASL</button>
+      <button class="mode-btn" id="modeFSL" onclick="setMode('FSL')">FSL</button>
+    </div>
+    <div style="font:600 10px 'Syne',sans-serif; color:rgba(226,230,240,0.5); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Air Button Dwell</div>
+    <input type="range" min="500" max="3000" step="100" value="1500" style="width:100%; accent-color:#00f5d4; cursor:pointer;" oninput="AIR_BTN.dwellMs=+this.value; document.getElementById('dwellLabel').textContent=this.value+'ms'" />
+    <div id="dwellLabel" style="font:600 10px 'Space Mono',monospace; color:#00f5d4; text-align:center; margin-top:4px;">1500ms</div>
+  </div>
 
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

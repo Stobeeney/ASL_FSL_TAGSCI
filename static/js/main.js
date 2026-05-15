@@ -46,6 +46,10 @@ const HOLD_DURATION_MS = 1200; // ms the gesture must be held before output is c
 /* ── TTS state ── */
 let voiceOutputEnabled = false;
 
+/* ── Sidebar feature toggles ── */
+let handTrackingEnabled = true;
+let faceTrackingEnabled = true;
+
 /* ── Air Button state ── */
 const AIR_BTN = { nx: 0.18, ny: 0.5, radius: 18, dwellMs: 1500 };
 let airState = 'idle';      // 'idle' | 'dwelling_start' | 'recording' | 'dwelling_stop'
@@ -107,6 +111,7 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
     const panel = $(`panel-${tab}`);
     if (panel) panel.style.display = '';
+    updateSideActive();
     if (tab === 'dataset') {
       loadDataset();
       if (_datasetAutoRefresh) clearInterval(_datasetAutoRefresh);
@@ -628,7 +633,7 @@ function onResults(results) {
   localState.hand_labels = [];
   localState.hands_detected = 0;
 
-  if (results.multiHandLandmarks) {
+  if (handTrackingEnabled && results.multiHandLandmarks) {
     localState.hands_detected = results.multiHandLandmarks.length;
     for (let i = 0; i < results.multiHandLandmarks.length; i++) {
       const landmarks = results.multiHandLandmarks[i];
@@ -639,15 +644,14 @@ function onResults(results) {
       drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00f5d4', lineWidth: 2});
       drawLandmarks(canvasCtx, landmarks, {color: '#ffffff', lineWidth: 1, radius: 3});
     }
-    
-    // Send to backend for classification if we have landmarks
+
     if (localState.landmarks.length > 0) {
-        classifyLandmarks(localState.landmarks[0]);
+      classifyLandmarks(localState.landmarks[0]);
     } else {
-        updateSign("—", 0);
+      updateSign('—', 0);
     }
   } else {
-      updateSign("—", 0);
+    updateSign('—', 0);
   }
 
   applyPayload(localState);
@@ -656,6 +660,7 @@ function onResults(results) {
 }
 
 function onFaceResults(results) {
+    if (!faceTrackingEnabled) return;
     if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
         
@@ -896,6 +901,60 @@ function setMode(mode) {
   el.modeChip.textContent = `${mode} Mode · Live`;
 }
 
+
+/* ═══════════════════════════════════════
+   LEFT SIDEBAR BUTTONS
+   ═══════════════════════════════════════ */
+function sideNav(tab) {
+  document.querySelectorAll('.tab').forEach(btn => {
+    if (btn.dataset.tab === tab) btn.click();
+  });
+}
+
+function updateSideActive() {
+  const activeTab = document.querySelector('.tab.active')?.dataset.tab;
+  $('sideCamBtn').classList.toggle('active', activeTab === 'live');
+  $('sideDatasetBtn').classList.toggle('active', activeTab === 'dataset');
+}
+
+function sideToggleHands() {
+  handTrackingEnabled = !handTrackingEnabled;
+  $('sideHandsBtn').classList.toggle('active', handTrackingEnabled);
+  if (!handTrackingEnabled) {
+    localState.hands_detected = 0;
+    localState.landmarks = [];
+    localState.hand_labels = [];
+    updateSign('—', 0);
+  }
+}
+
+function sideToggleFace() {
+  faceTrackingEnabled = !faceTrackingEnabled;
+  $('sideFaceBtn').classList.toggle('active', faceTrackingEnabled);
+  if (!faceTrackingEnabled) {
+    localState.face_bbox = null;
+    localState.emotion = 'Neutral';
+    localState.emotion_conf = 0.90;
+    el.faceBox.style.display = 'none';
+  }
+}
+
+function sideToggleSettings() {
+  const panel = $('sideSettingsPanel');
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  $('sideSettingsBtn').classList.toggle('active', !isOpen);
+}
+
+// Close settings panel on outside click
+document.addEventListener('click', e => {
+  const panel = $('sideSettingsPanel');
+  const btn = $('sideSettingsBtn');
+  if (panel && panel.style.display !== 'none' && !panel.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+    panel.style.display = 'none';
+    btn.classList.remove('active');
+  }
+});
 
 /* ═══════════════════════════════════════
    CAPTURE TYPE (gesture / motion)
@@ -1384,4 +1443,5 @@ function scrubPlayback(val) {
    ═══════════════════════════════════════ */
 renderEmotions();
 setConfidence(0);
+updateSideActive();
 connectWS();

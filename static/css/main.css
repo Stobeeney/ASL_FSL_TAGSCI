@@ -1535,6 +1535,7 @@ body {
   height: 100%;
   object-fit: cover;
   z-index: 2;
+  transform: scaleX(-1);
   /* above grid, below all overlays */
   display: block;
   transition: opacity 0.4s;

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignStudio AI — ASL / FSL Recognition Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  
+  <!-- MediaPipe Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════ TOP BAR ═══════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-orb"></div>
+      <div class="brand-text">
+        <span class="brand-name">SignStudio AI</span>
+        <span class="brand-sub">ASL / FSL Recognition Platform v0.2</span>
+      </div>
+    </div>
+
+    <nav class="topbar-tabs">
+      <button class="tab active" data-tab="live">Live</button>
+      <button class="tab" data-tab="train">Train</button>
+      <button class="tab" data-tab="dataset">Dataset</button>
+      <button class="tab" data-tab="model">Model</button>
+    </nav>
+
+    <div class="topbar-meta">
+      <div class="meta-chip" id="camStatusChip">
+        <span class="dot dot--amber" id="camDot"></span>
+        <span id="camStatusText">CONNECTING…</span>
+      </div>
+      <div class="meta-chip">
+        <span class="dot dot--amber"></span>
+        <span id="topLandmarks">0 LANDMARKS</span>
+      </div>
+      <div class="meta-chip rec-badge">
+        <span class="dot dot--red blink"></span>
+        <span>REC</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════ MAIN LAYOUT ═══════════════════════════ -->
+  <div class="layout">
+
+    <!-- ── LEFT SIDEBAR ── -->
+    <aside class="sidebar sidebar--left">
+      <button class="side-btn active" title="Camera Feed">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="2" y="7" width="20" height="15" rx="3" />
+          <circle cx="12" cy="14.5" r="3.5" />
+          <path d="M7 7V5a1 1 0 011-1h8a1 1 0 011 1v2" />
+        </svg>
+      </button>
+      <button class="side-btn" title="Hand Tracking">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M8 3v7M11 5v5M14 4v6M17 6v4M8 10c0 0-2 1-2 4v3a4 4 0 008 0v-5" />
+        </svg>
+      </button>
+      <button class="side-btn" title="Face / Emotion">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+          <circle cx="9" cy="10" r="1" fill="currentColor" />
+          <circle cx="15" cy="10" r="1" fill="currentColor" />
+        </svg>
+      </button>
+      <div class="side-divider"></div>
+      <button class="side-btn" title="Dataset">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <ellipse cx="12" cy="7" rx="8" ry="3" />
+          <path d="M4 7v5c0 1.66 3.58 3 8 3s8-1.34 8-3V7" />
+          <path d="M4 12v5c0 1.66 3.58 3 8 3s8-1.34 8-3v-5" />
+        </svg>
+      </button>
+      <button class="side-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+        </svg>
+      </button>
+    </aside>
+
+    <!-- ── CENTER ── -->
+    <main class="center">
+
+      <!-- ══ LIVE PANEL ══ -->
+      <div class="tab-panel" id="panel-live">
+
+        <!-- CAMERA VIEWPORT -->
+        <div class="camera-viewport">
+          <video id="inputVideo" style="display:none;" playsinline autoplay muted></video>
+          <canvas id="outputCanvas" class="video-feed"></canvas>
+
+          <div class="bracket bracket--tl"></div>
+          <div class="bracket bracket--tr"></div>
+          <div class="bracket bracket--bl"></div>
+          <div class="bracket bracket--br"></div>
+          <div class="scanline"></div>
+          <div class="grid-overlay"></div>
+
+          <div class="cam-chips">
+            <div class="cam-chip">
+              <span class="dot dot--green" id="feedDot"></span>
+              <span id="feedResText">— · —fps</span>
+            </div>
+            <div class="cam-chip" id="landmarkChip">0 landmarks · waiting</div>
+            <div class="cam-chip" id="modeChip">ASL Mode · Live</div>
+          </div>
+
+          <div class="conf-gauge">
+            <div class="conf-label">CONFIDENCE</div>
+            <div class="conf-arc-wrap">
+              <svg class="conf-arc" viewBox="0 0 80 44">
+                <path d="M8 40 A32 32 0 0 1 72 40" stroke="rgba(255,255,255,0.08)" stroke-width="6" fill="none"
+                  stroke-linecap="round" />
+                <path id="confArcFill" d="M8 40 A32 32 0 0 1 72 40" stroke="#00f5d4" stroke-width="6" fill="none"
+                  stroke-linecap="round" stroke-dasharray="0 100" />
+              </svg>
+              <span class="conf-pct" id="confPct">—%</span>
+            </div>
+          </div>
+
+          <div class="face-box" id="faceBox" style="display:none;">
+            <div class="fb-corner fb-tl"></div>
+            <div class="fb-corner fb-tr"></div>
+            <div class="fb-corner fb-bl"></div>
+            <div class="fb-corner fb-br"></div>
+            <div class="fb-label" id="faceLabel">Neutral</div>
+            <div class="fb-sub" id="faceConf">conf: —</div>
+          </div>
+
+          <div class="sign-pill" id="signPill" style="display:none;">
+            <span id="signPillText">—</span>
+            <span class="sign-pill-sub" id="signPillSub">waiting for gesture…</span>
+          </div>
+        </div>
+
+        <!-- BOTTOM STRIP -->
+        <div class="bottom-strip">
+
+          <!-- Word output -->
+          <div class="word-output">
+            <div class="wo-header">
+              <span class="wo-label">Recognized Sign</span>
+              <div class="wo-badges">
+                <span class="badge badge--asl">ASL</span>
+                <span class="badge badge--fsl" id="fslBadge">FSL: —</span>
+              </div>
+            </div>
+            <div class="wo-word" id="woWord">—</div>
+            <div class="wo-footer">
+              <span class="wo-conf-icon">▲</span>
+              <span class="wo-conf" id="woConf">waiting…</span>
+              <div class="wo-bar-wrap">
+                <div class="wo-bar" id="woBar" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="wo-hold" id="woHold" style="display:none;">
+              <span class="wo-hold-label">Hold: <span id="woHoldSign"></span></span>
+              <div class="wo-hold-bar-wrap">
+                <div class="wo-hold-bar" id="woHoldBar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dashboard panels -->
+          <div class="dash-panels">
+
+            <div class="dash-panel on" id="panelHand">
+              <div class="dp-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M8 3v7M11 5v5M14 4v6M17 6v4M8 10c0 0-2 1-2 4v3a4 4 0 008 0v-5" />
+                </svg>
+              </div>
+              <div class="dp-name">Hand<br>Tracking</div>
+              <label class="toggle">
+                <input type="checkbox" checked onchange="togglePanel('panelHand', this)" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+
+            <div class="dash-panel on" id="panelEmotion">
+              <div class="dp-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                  <circle cx="9" cy="10" r="1" fill="currentColor" />
+                  <circle cx="15" cy="10" r="1" fill="currentColor" />
+                </svg>
+              </div>
+              <div class="dp-name">Emotion<br>Detection</div>
+              <label class="toggle">
+                <input type="checkbox" checked onchange="togglePanel('panelEmotion', this)" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+
+            <div class="dash-panel" id="panelLLM">
+              <div class="dp-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="3" y="3" width="7" height="7" rx="2" />
+                  <rect x="14" y="3" width="7" height="7" rx="2" />
+                  <rect x="14" y="14" width="7" height="7" rx="2" />
+                  <path d="M7 17v1a3 3 0 003 3h1M10 10v1a3 3 0 003 3h1" />
+                </svg>
+              </div>
+              <div class="dp-name">LLM<br>Interpretation</div>
+              <label class="toggle">
+                <input type="checkbox" onchange="togglePanel('panelLLM', this)" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+
+            <div class="dash-panel" id="panelVoice">
+              <div class="dp-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                  <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
+                </svg>
+              </div>
+              <div class="dp-name">Voice<br>Output</div>
+              <label class="toggle">
+                <input type="checkbox" onchange="togglePanel('panelVoice', this)" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+
+            <!-- Training + Phrase panel -->
+            <div class="dash-panel dash-panel--wide" id="panelPhrase">
+              <div class="phrase-builder">
+
+                <!-- Capture type toggle -->
+                <div class="capture-type-row">
+                  <span class="pb-label">Capture As</span>
+                  <div class="type-toggle">
+                    <button class="type-btn active" id="typeGesture"
+                      onclick="setCaptureType('gesture')">Gesture</button>
+                    <button class="type-btn" id="typeMotion" onclick="setCaptureType('motion')">Motion</button>
+                  </div>
+                </div>
+
+                <!-- Label input -->
+                <input class="pb-input" id="trainLabel" type="text" placeholder="Type sign label, e.g. HELLO…"
+                  autocomplete="off" spellcheck="false" />
+
+                <!-- Recording indicator (motion mode) -->
+                <div class="rec-indicator" id="recIndicator" style="display:none;">
+                  <span class="dot dot--red blink"></span>
+                  <span id="recFrames">0 / 80 frames</span>
+                </div>
+
+                <!-- Phrase buffer -->
+                <div class="pb-phrase" id="phraseBuffer">—</div>
+
+                <!-- LLM Interpretation Box -->
+                <div class="llm-box" id="llmBox" style="display:none;">
+                  <div class="llm-tag">AI INTERPRETATION</div>
+                  <input id="llmApiKey" type="password" placeholder="Paste Anthropic API key (sk-ant-...)"
+                    style="width:100%;margin-bottom:8px;padding:6px 10px;background:#0d1117;border:1px solid #1e3a2f;border-radius:6px;color:#e0ffe8;font-size:11px;font-family:monospace;outline:none;" />
+                  <div class="llm-text" id="llmText">Enter your API key above, then toggle ON to enable real AI
+                    interpretation.</div>
+                </div>
+
+                <div class="pb-actions">
+                  <button class="pb-btn" onclick="clearPhrase()">Clear</button>
+                  <button class="pb-btn pb-btn--capture" id="captureBtn" onclick="handleCapture()">Capture
+                    Gesture</button>
+                  <button class="pb-btn pb-btn--accent" onclick="savePhrase()">Save Phrase</button>
+                </div>
+
+              </div>
+            </div>
+
+          </div><!-- /dash-panels -->
+        </div><!-- /bottom-strip -->
+
+      </div><!-- /panel-live -->
+
+
+      <!-- ══ TRAIN PANEL ══ -->
+      <div class="tab-panel" id="panel-train" style="display:none;">
+        <div class="placeholder-panel">
+          <div class="ph-icon">✋</div>
+          <div class="ph-title">Training Mode</div>
+          <div class="ph-sub">Use the Live tab to capture gesture and motion samples.<br>
+            Switch to the Dataset tab to review what you've collected.</div>
+        </div>
+      </div>
+
+
+      <!-- ══ DATASET PANEL ══ -->
+      <div class="tab-panel" id="panel-dataset" style="display:none;">
+        <div class="dataset-view">
+
+          <div class="dv-toolbar">
+            <div class="dv-toolbar-left">
+              <span class="dv-title">Dataset</span>
+              <span class="dv-count" id="datasetCount">0 samples</span>
+            </div>
+            <div class="dv-toolbar-right" style="display:flex;gap:10px;align-items:center;">
+              <input type="text" id="datasetSearch" class="pb-input" style="width:180px;margin:0;"
+                placeholder="Search label..." oninput="filterDataset()" />
+              <button class="pb-btn" onclick="loadDataset()">Refresh</button>
+              <button class="pb-btn pb-btn--accent" onclick="exportDataset()">Export JSON</button>
+              <button class="pb-btn" onclick="document.getElementById('importJsonInput').click()">Import JSON</button>
+              <input type="file" id="importJsonInput" accept=".json" style="display:none" onchange="importDataset(this)" />
+              <button class="pb-btn pb-btn--stop" onclick="deleteAllSamples()">Delete All</button>
+            </div>
+          </div>
+
+          <!-- Playback viewer -->
+          <div class="dv-playback" id="dvPlayback" style="display:none;">
+            <div class="dv-pb-header">
+              <span class="dv-pb-label" id="pbLabel">—</span>
+              <span class="dv-pb-meta" id="pbMeta">—</span>
+              <div class="dv-pb-controls">
+                <button class="pb-btn" id="pbPlayBtn" onclick="togglePlayback()">▶ Play</button>
+                <button class="pb-btn pb-btn--stop" onclick="closePlayback()">✕ Close</button>
+                <span class="dv-pb-frame" id="pbFrameCounter">0 / 0</span>
+              </div>
+            </div>
+            <div class="dv-pb-canvas-wrap">
+              <canvas id="pbCanvas" class="dv-pb-canvas"></canvas>
+              <div class="dv-pb-scrub-wrap">
+                <input type="range" id="pbScrub" class="dv-pb-scrub" min="0" value="0" step="1"
+                  oninput="scrubPlayback(this.value)" />
+              </div>
+            </div>
+          </div>
+
+          <div class="dv-table-wrap">
+            <div class="dv-empty" id="datasetEmpty">No samples yet — capture gestures in the Live tab.</div>
+            <table class="dv-table">
+              <thead>
+                <tr>
+                  <th onclick="sortDataset('id')" style="cursor:pointer;"># ↕</th>
+                  <th onclick="sortDataset('label')" style="cursor:pointer;">Label ↕</th>
+                  <th onclick="sortDataset('mode')" style="cursor:pointer;">Mode ↕</th>
+                  <th onclick="sortDataset('type')" style="cursor:pointer;">Type ↕</th>
+                  <th onclick="sortDataset('frames')" style="cursor:pointer;">Frames ↕</th>
+                  <th onclick="sortDataset('created_at')" style="cursor:pointer;">Captured At ↕</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="datasetTableBody"></tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ══ MODEL PANEL ══ -->
+      <div class="tab-panel" id="panel-model" style="display:none;">
+        <div class="model-view">
+          <div class="dv-toolbar">
+            <span class="dv-title">AI Model Engine</span>
+          </div>
+
+          <div class="model-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="model-card">
+              <div class="mc-header">
+                <div class="mc-icon">🧠</div>
+                <div class="mc-info">
+                  <div class="mc-name">Gesture Recognition Model</div>
+                  <div class="mc-sub">Random Forest Classifier (scikit-learn)</div>
+                </div>
+              </div>
+
+              <div class="mc-body">
+                <p>Train a production-ready model using your captured dataset. This model generalizes better than raw
+                  landmark comparison and provides higher accuracy for complex signs.</p>
+
+                <div class="mc-stats">
+                  <div class="mc-stat">
+                    <span class="mc-stat-val" id="modelClassCount">—</span>
+                    <span class="mc-stat-key">Classes</span>
+                  </div>
+                  <div class="mc-stat">
+                    <span class="mc-stat-val" id="modelSampleCount">—</span>
+                    <span class="mc-stat-key">Total Samples</span>
+                  </div>
+                  <div class="mc-stat">
+                    <span class="mc-stat-val" id="modelStatus">Ready</span>
+                    <span class="mc-stat-key">Status</span>
+                  </div>
+                </div>
+
+                <div class="model-breakdown">
+                  <div class="mb-title">Sample Distribution</div>
+                  <ul class="mb-list" id="modelBreakdownList">
+                    <!-- Injected by JS -->
+                    <li class="mb-item">No samples captured yet...</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="mc-footer">
+                <div style="display:flex; gap:10px; width:100%; flex-direction: column;">
+                  <input type="text" id="modelNameInput" class="pb-input"
+                    placeholder="Model filename (e.g. gesture_model_v1)" style="margin:0; width:100%;" />
+                  <button class="pb-btn pb-btn--accent" id="trainBtn" onclick="trainModel()" style="width:100%;">
+                    <span id="trainBtnText">Train Working Model</span>
+                  </button>
+                </div>
+                <div class="model-progress" id="trainProgress" style="display:none;">
+                  <div class="mp-bar"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Saved Models List -->
+            <div class="model-card">
+              <div class="mc-header">
+                <div class="mc-icon">📁</div>
+                <div class="mc-info">
+                  <div class="mc-name">Saved Models</div>
+                  <div class="mc-sub">Manage and switch between trained versions</div>
+                </div>
+              </div>
+              <div class="mc-body">
+                <ul class="mb-list" id="savedModelsList" style="max-height: 400px; overflow-y: auto;">
+                  <li class="mb-item">Scanning for models...</li>
+                </ul>
+              </div>
+              <div class="mc-footer">
+                <button class="pb-btn" onclick="loadModelList()" style="width:100%;">Refresh List</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="model-log" id="modelLog">
+            <div class="ml-entry">Waiting for instruction…</div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ── RIGHT SIDEBAR ── -->
+    <aside class="sidebar sidebar--right">
+      <div class="rs-header">
+        <span class="rs-title">Emotions</span>
+        <span class="dot dot--cyan blink"></span>
+      </div>
+
+      <ul class="emotion-list" id="emotionList">
+        <!-- injected by JS -->
+      </ul>
+
+      <div class="rs-divider"></div>
+
+      <div class="rs-stats">
+        <div class="rs-stat-row">
+          <span class="rs-key">Mode</span>
+          <span class="rs-val" id="statMode">ASL</span>
+        </div>
+        <div class="rs-stat-row">
+          <span class="rs-key">Landmarks</span>
+          <span class="rs-val" id="statLM">0</span>
+        </div>
+        <div class="rs-stat-row">
+          <span class="rs-key">Faces</span>
+          <span class="rs-val" id="statFaces">0</span>
+        </div>
+        <div class="rs-stat-row">
+          <span class="rs-key">Hands</span>
+          <span class="rs-val" id="statHands">0 / 2</span>
+        </div>
+        <div class="rs-stat-row">
+          <span class="rs-key">FPS</span>
+          <span class="rs-val" id="statFPS">—</span>
+        </div>
+        <div class="rs-stat-row">
+          <span class="rs-key">Samples</span>
+          <span class="rs-val" id="statSamples">0</span>
+        </div>
+      </div>
+
+      <div class="rs-divider"></div>
+
+      <div class="rs-mode-toggle">
+        <button class="mode-btn active" id="modeASL" onclick="setMode('ASL')">ASL</button>
+        <button class="mode-btn" id="modeFSL" onclick="setMode('FSL')">FSL</button>
+      </div>
+
+    </aside>
+
+  </div><!-- /layout -->
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

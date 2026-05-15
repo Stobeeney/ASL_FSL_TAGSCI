@@ -46,6 +46,14 @@ const HOLD_DURATION_MS = 1200; // ms the gesture must be held before output is c
 /* ── TTS state ── */
 let voiceOutputEnabled = false;
 
+/* ── Air Button state ── */
+const AIR_BTN = { nx: 0.82, ny: 0.15, radius: 38, dwellMs: 1500 };
+let airState = 'idle';      // 'idle' | 'dwelling_start' | 'recording' | 'dwelling_stop'
+let airDwellAccum = 0;
+let airDwellLast = 0;
+let airSentence = [];
+let airLastConfirmed = '—';
+
 /* ── DOM refs ── */
 const $ = id => document.getElementById(id);
 const el = {
@@ -427,6 +435,152 @@ let localState = {
 let lastFrameTime = 0;
 let frameCount = 0;
 
+/* ═══════════════════════════════════════
+   AIR BUTTON
+   ═══════════════════════════════════════ */
+function updateAirButton(handLandmarks) {
+  const cw = canvasElement.width;
+  const ch = canvasElement.height;
+  const bx = AIR_BTN.nx * cw;
+  const by = AIR_BTN.ny * ch;
+  const now = performance.now();
+
+  // Index finger tip = landmark 8
+  let hovering = false;
+  if (handLandmarks && handLandmarks[8]) {
+    const fx = handLandmarks[8].x * cw;
+    const fy = handLandmarks[8].y * ch;
+    hovering = Math.hypot(fx - bx, fy - by) < AIR_BTN.radius;
+  }
+
+  // Dwell timer
+  if (hovering) {
+    if (airDwellLast > 0) airDwellAccum += now - airDwellLast;
+    airDwellLast = now;
+  } else {
+    airDwellAccum = 0;
+    airDwellLast = 0;
+  }
+  const dwellPct = Math.min(airDwellAccum / AIR_BTN.dwellMs, 1.0);
+
+  // State transitions on full dwell
+  if (dwellPct >= 1.0) {
+    airDwellAccum = 0;
+    if (airState === 'idle' || airState === 'dwelling_start') {
+      airState = 'recording';
+      airSentence = [];
+      airLastConfirmed = '—';
+      showAirOverlay('');
+    } else if (airState === 'recording' || airState === 'dwelling_stop') {
+      const sentence = airSentence.join(' ');
+      airState = 'idle';
+      speakAirSentence(sentence);
+      showAirOverlay(sentence, true);
+    }
+  } else {
+    if (hovering) {
+      if (airState === 'idle') airState = 'dwelling_start';
+      else if (airState === 'recording') airState = 'dwelling_stop';
+    } else {
+      if (airState === 'dwelling_start') airState = 'idle';
+      else if (airState === 'dwelling_stop') airState = 'recording';
+    }
+  }
+
+  // Collect confirmed signs while recording
+  if (airState === 'recording' || airState === 'dwelling_stop') {
+    const s = localState.sign;
+    if (s !== '—' && s !== airLastConfirmed) {
+      airSentence.push(s);
+      airLastConfirmed = s;
+      showAirOverlay(airSentence.join(' '));
+    }
+  }
+
+  drawAirButton(bx, by, dwellPct, hovering);
+}
+
+function drawAirButton(bx, by, dwellPct, hovering) {
+  const ctx = canvasCtx;
+  const r = AIR_BTN.radius;
+  const isRec = airState === 'recording' || airState === 'dwelling_stop';
+
+  ctx.save();
+
+  // Outer glow
+  if (hovering) {
+    const glow = ctx.createRadialGradient(bx, by, r, bx, by, r + 20);
+    glow.addColorStop(0, isRec ? 'rgba(255,60,60,0.4)' : 'rgba(0,245,212,0.3)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(bx, by, r + 20, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+  }
+
+  // Button fill
+  ctx.beginPath();
+  ctx.arc(bx, by, r, 0, Math.PI * 2);
+  ctx.fillStyle = isRec ? 'rgba(220,40,40,0.85)' : 'rgba(0,20,18,0.75)';
+  ctx.fill();
+  ctx.strokeStyle = isRec ? '#ff4444' : '#00f5d4';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Dwell arc
+  if (dwellPct > 0 && dwellPct < 1) {
+    ctx.beginPath();
+    ctx.arc(bx, by, r + 7, -Math.PI / 2, -Math.PI / 2 + dwellPct * Math.PI * 2);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
+
+  // Icon
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${Math.round(r * 0.55)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(isRec ? '■' : '▶', bx, by);
+
+  // Label below button
+  ctx.font = `bold 11px sans-serif`;
+  ctx.fillStyle = isRec ? '#ff9999' : '#00f5d4';
+  ctx.fillText(isRec ? 'HOVER TO STOP' : 'HOVER TO START', bx, by + r + 14);
+
+  // Sentence preview above button
+  if ((airState === 'recording' || airState === 'dwelling_stop') && airSentence.length > 0) {
+    const text = airSentence.join(' · ');
+    ctx.font = 'bold 13px monospace';
+    ctx.fillStyle = '#00f5d4';
+    const maxW = 200;
+    ctx.fillText(text.length > 22 ? '…' + text.slice(-20) : text, bx, by - r - 14);
+  }
+
+  ctx.restore();
+}
+
+function showAirOverlay(text, isFinal = false) {
+  let el = $('airSentenceOverlay');
+  if (!el) return;
+  el.textContent = text ? (isFinal ? `"${text}"` : text) : '';
+  el.style.display = text ? 'block' : 'none';
+  el.style.color = isFinal ? '#ffdb4d' : '#00f5d4';
+  if (isFinal) setTimeout(() => { if (el) el.style.display = 'none'; }, 5000);
+}
+
+function speakAirSentence(sentence) {
+  if (!sentence) return;
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(sentence.toLowerCase());
+    utt.rate = 0.85;
+    utt.pitch = 1.0;
+    window.speechSynthesis.speak(utt);
+  }
+}
+
 function onResults(results) {
   frameCount++;
   const now = performance.now();
@@ -482,6 +636,7 @@ function onResults(results) {
   }
 
   applyPayload(localState);
+  updateAirButton(localState.landmarks.length > 0 ? localState.landmarks[0] : null);
   canvasCtx.restore();
 }
 

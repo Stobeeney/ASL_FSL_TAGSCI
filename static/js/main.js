@@ -47,7 +47,7 @@ const HOLD_DURATION_MS = 1200; // ms the gesture must be held before output is c
 let voiceOutputEnabled = false;
 
 /* ── Air Button state ── */
-const AIR_BTN = { nx: 0.82, ny: 0.25, radius: 38, dwellMs: 1500 };
+const AIR_BTN = { nx: 0.18, ny: 0.25, radius: 38, dwellMs: 1500 };
 let airState = 'idle';      // 'idle' | 'dwelling_start' | 'recording' | 'dwelling_stop'
 let airDwellAccum = 0;
 let airDwellLast = 0;
@@ -537,6 +537,12 @@ function drawAirButton(bx, by, dwellPct, hovering) {
     ctx.stroke();
   }
 
+  // All text is drawn in a locally-flipped context to cancel the CSS scaleX(-1)
+  ctx.save();
+  ctx.translate(bx, 0);
+  ctx.scale(-1, 1);
+  ctx.translate(-bx, 0);
+
   // Icon
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold ${Math.round(r * 0.55)}px sans-serif`;
@@ -554,10 +560,10 @@ function drawAirButton(bx, by, dwellPct, hovering) {
     const text = airSentence.join(' · ');
     ctx.font = 'bold 13px monospace';
     ctx.fillStyle = '#00f5d4';
-    const maxW = 200;
     ctx.fillText(text.length > 22 ? '…' + text.slice(-20) : text, bx, by - r - 14);
   }
 
+  ctx.restore();
   ctx.restore();
 }
 

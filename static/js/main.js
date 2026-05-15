@@ -47,7 +47,7 @@ const HOLD_DURATION_MS = 1200; // ms the gesture must be held before output is c
 let voiceOutputEnabled = false;
 
 /* ── Air Button state ── */
-const AIR_BTN = { nx: 0.18, ny: 0.38, radius: 26, dwellMs: 1500 };
+const AIR_BTN = { nx: 0.18, ny: 0.5, radius: 18, dwellMs: 1500 };
 let airState = 'idle';      // 'idle' | 'dwelling_start' | 'recording' | 'dwelling_stop'
 let airDwellAccum = 0;
 let airDwellLast = 0;

@@ -299,9 +299,11 @@ function updateFaceBox(bbox, emotion, conf) {
   if (!bbox) { el.faceBox.style.display = 'none'; return; }
   const W = viewport.clientWidth;
   const H = viewport.clientHeight;
+  // Mirror x position to match CSS-flipped canvas
+  const mirroredX = 1 - bbox.x - bbox.w;
   el.faceBox.style.cssText = `
     display:block;
-    left:${bbox.x * W}px; top:${bbox.y * H}px;
+    left:${mirroredX * W}px; top:${bbox.y * H}px;
     width:${bbox.w * W}px; height:${bbox.h * H}px;
     transform:none;
   `;

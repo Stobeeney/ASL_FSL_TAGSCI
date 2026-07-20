@@ -595,7 +595,8 @@ body {
    ═══════════════════════════════════════ */
 .bottom-strip {
   display: flex;
-  height: 108px;
+  height: auto;
+  min-height: 108px;
   border-top: 0.5px solid var(--border);
   background: rgba(13, 15, 22, 0.9);
   flex-shrink: 0;

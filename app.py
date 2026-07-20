@@ -706,7 +706,7 @@ def interpret_signs():
         ]
     }
 
-    models = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3-flash"]
+    models = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3-flash"]
     last_err = None
 
     for model_name in models:
@@ -720,7 +720,7 @@ def interpret_signs():
             method="POST"
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 result = json.loads(resp.read())
                 text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
                 return jsonify({"ok": True, "interpretation": text})
@@ -737,18 +737,25 @@ def interpret_signs():
                 return jsonify({"ok": False, "error": f"Gemini API Error: {msg}"}), e.code
             except Exception:
                 return jsonify({"ok": False, "error": f"Gemini API HTTP Error {e.code}: {e.reason}"}), e.code
+        except (urllib.error.URLError, TimeoutError) as e:
+            last_err = e
+            # Try next model on connection timeout or network errors
+            continue
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
-    # If we finished the loop, all attempted models were busy
+    # If we finished the loop, all attempted models failed
     if last_err:
-        try:
-            err_body = last_err.read().decode('utf-8')
-            err_json = json.loads(err_body)
-            msg = err_json.get('error', {}).get('message', err_body)
-            return jsonify({"ok": False, "error": f"Gemini API Error (All models busy): {msg}"}), last_err.code
-        except Exception:
-            return jsonify({"ok": False, "error": f"Gemini API HTTP Error {last_err.code}: {last_err.reason}"}), last_err.code
+        if isinstance(last_err, urllib.error.HTTPError):
+            try:
+                err_body = last_err.read().decode('utf-8')
+                err_json = json.loads(err_body)
+                msg = err_json.get('error', {}).get('message', err_body)
+                return jsonify({"ok": False, "error": f"Gemini API Error (All models busy): {msg}"}), last_err.code
+            except Exception:
+                return jsonify({"ok": False, "error": f"Gemini API HTTP Error {last_err.code}: {last_err.reason}"}), last_err.code
+        else:
+            return jsonify({"ok": False, "error": f"Gemini API Connection/Timeout Error: {str(last_err)}"}), 504
     return jsonify({"ok": False, "error": "No models available"}), 500
 
 

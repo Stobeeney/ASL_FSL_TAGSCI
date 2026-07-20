@@ -670,6 +670,9 @@ def interpret_signs():
         return jsonify({"ok": False, "error": "No API key provided"}), 400
 
     prompt = (
+        f"You are an expert ASL (American Sign Language) and FSL (Filipino Sign Language) interpreter.\n\n"
+        f"Your task is to take direct sign language text (gloss) and translate it into natural, grammatically correct, and conversational English.\n\n"
+        f"CRITICAL RULE: Focus on MEANING-BASED translation, not word-for-word translation. Sign languages use different syntax (like Time-Topic-Comment). You must reorder and contextualize the signs to output the true intent of the sentence.\n\n"
         f"Guidelines:\n"
         f"1. Fix the syntax: Convert ASL/FSL grammar into standard English Subject-Verb-Object structures.\n"
         f"2. Add missing words: Sign language often drops articles (a, an, the) and \"to be\" verbs (is, are, am). Add these back in to make the sentence sound natural.\n"

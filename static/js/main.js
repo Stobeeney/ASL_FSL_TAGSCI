@@ -1160,7 +1160,9 @@ async function runLLM() {
 function speakInterpretation(text) {
   if (!voiceOutputEnabled || !window.speechSynthesis || !text) return;
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
+  // Strip parenthetical text (e.g. "(unpleasant or harmful)") so it is not spoken aloud
+  const cleanText = text.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+  const utt = new SpeechSynthesisUtterance(cleanText);
   utt.rate = 0.9;
   utt.pitch = 1.0;
   window.speechSynthesis.speak(utt);

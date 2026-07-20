@@ -660,6 +660,7 @@ def train_model():
 @app.route('/api/interpret', methods=['POST'])
 def interpret_signs():
     import urllib.request
+    import urllib.parse
     data = request.get_json(force=True)
     signs = data.get('signs', [])
     api_key = data.get('api_key', '').strip()
@@ -668,6 +669,8 @@ def interpret_signs():
         return jsonify({"ok": False, "error": "No signs provided"}), 400
     if not api_key:
         return jsonify({"ok": False, "error": "No API key provided"}), 400
+    if " " in api_key or len(api_key) < 10:
+        return jsonify({"ok": False, "error": "Invalid API key format. Please enter a valid Gemini API key (starts with 'AIzaSy...')"}), 400
 
     prompt = (
         f"You are an expert ASL (American Sign Language) and FSL (Filipino Sign Language) interpreter.\n\n"
@@ -703,7 +706,7 @@ def interpret_signs():
         ]
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={urllib.parse.quote(api_key)}"
 
     req = urllib.request.Request(
         url,

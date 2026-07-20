@@ -706,32 +706,50 @@ def interpret_signs():
         ]
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-3.5-flash:generateContent?key={urllib.parse.quote(api_key)}"
+    models = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3-flash"]
+    last_err = None
 
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode(),
-        headers={
-            "Content-Type": "application/json"
-        },
-        method="POST"
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            result = json.loads(resp.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
-            return jsonify({"ok": True, "interpretation": text})
-    except urllib.error.HTTPError as e:
+    for model_name in models:
+        url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent?key={urllib.parse.quote(api_key)}"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
         try:
-            err_body = e.read().decode('utf-8')
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read())
+                text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                return jsonify({"ok": True, "interpretation": text})
+        except urllib.error.HTTPError as e:
+            last_err = e
+            if e.code in (429, 503):
+                # Try next model if overloaded or rate-limited
+                continue
+            # For other errors (like 400 invalid key), exit immediately
+            try:
+                err_body = e.read().decode('utf-8')
+                err_json = json.loads(err_body)
+                msg = err_json.get('error', {}).get('message', err_body)
+                return jsonify({"ok": False, "error": f"Gemini API Error: {msg}"}), e.code
+            except Exception:
+                return jsonify({"ok": False, "error": f"Gemini API HTTP Error {e.code}: {e.reason}"}), e.code
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    # If we finished the loop, all attempted models were busy
+    if last_err:
+        try:
+            err_body = last_err.read().decode('utf-8')
             err_json = json.loads(err_body)
             msg = err_json.get('error', {}).get('message', err_body)
-            return jsonify({"ok": False, "error": f"Gemini API Error: {msg}"}), e.code
+            return jsonify({"ok": False, "error": f"Gemini API Error (All models busy): {msg}"}), last_err.code
         except Exception:
-            return jsonify({"ok": False, "error": f"Gemini API HTTP Error {e.code}: {e.reason}"}), e.code
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+            return jsonify({"ok": False, "error": f"Gemini API HTTP Error {last_err.code}: {last_err.reason}"}), last_err.code
+    return jsonify({"ok": False, "error": "No models available"}), 500
 
 
 if __name__ == '__main__':

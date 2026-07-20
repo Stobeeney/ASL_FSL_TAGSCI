@@ -706,7 +706,7 @@ def interpret_signs():
         ]
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={urllib.parse.quote(api_key)}"
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={urllib.parse.quote(api_key)}"
 
     req = urllib.request.Request(
         url,
@@ -722,6 +722,14 @@ def interpret_signs():
             result = json.loads(resp.read())
             text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return jsonify({"ok": True, "interpretation": text})
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode('utf-8')
+            err_json = json.loads(err_body)
+            msg = err_json.get('error', {}).get('message', err_body)
+            return jsonify({"ok": False, "error": f"Gemini API Error: {msg}"}), e.code
+        except Exception:
+            return jsonify({"ok": False, "error": f"Gemini API HTTP Error {e.code}: {e.reason}"}), e.code
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

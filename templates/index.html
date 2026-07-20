@@ -9,7 +9,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=1.2.5" />
   
   <!-- MediaPipe Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -513,7 +513,7 @@
     <div id="dwellLabel" style="font:600 10px 'Space Mono',monospace; color:#00f5d4; text-align:center; margin-top:4px;">1500ms</div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}?v=1.2.5"></script>
 </body>
 
 </html>

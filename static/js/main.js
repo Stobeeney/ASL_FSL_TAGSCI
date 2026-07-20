@@ -554,12 +554,9 @@ function updateAirButton(handLandmarks) {
       speakAirSentence(sentence);
       showAirOverlay(sentence, true);
 
-      // Append to the main phrase builder buffer
+      // Overwrite the main phrase builder buffer with the recorded sentence to prevent duplication
       if (airSentence.length > 0) {
-        airSentence.forEach(s => {
-          phraseBuffer.push(s);
-          if (phraseBuffer.length > 8) phraseBuffer.shift();
-        });
+        phraseBuffer = [...airSentence];
         el.phraseBuffer.textContent = phraseBuffer.join(' · ');
         runLLM();
       }

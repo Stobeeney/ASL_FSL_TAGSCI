@@ -1157,8 +1157,10 @@ async function runLLM() {
 function speakInterpretation(text) {
   if (!voiceOutputEnabled || !window.speechSynthesis || !text) return;
   window.speechSynthesis.cancel();
+  // Only speak the translation part before the vertical bar '|' (predictions section)
+  const mainPart = text.split('|')[0];
   // Strip parenthetical text (e.g. "(unpleasant or harmful)") so it is not spoken aloud
-  const cleanText = text.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+  const cleanText = mainPart.replace(/\s*\(.*?\)\s*/g, ' ').trim();
   const utt = new SpeechSynthesisUtterance(cleanText);
   utt.rate = 0.9;
   utt.pitch = 1.0;

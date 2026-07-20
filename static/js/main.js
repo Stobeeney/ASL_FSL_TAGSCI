@@ -1148,12 +1148,22 @@ async function runLLM() {
     const data = await res.json();
     if (data.ok) {
       $('llmText').textContent = '💬 ' + data.interpretation;
+      speakInterpretation(data.interpretation);
     } else {
       $('llmText').textContent = '⚠ Error: ' + data.error;
     }
   } catch (e) {
     $('llmText').textContent = '⚠ Could not reach server.';
   }
+}
+
+function speakInterpretation(text) {
+  if (!voiceOutputEnabled || !window.speechSynthesis || !text) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate = 0.9;
+  utt.pitch = 1.0;
+  window.speechSynthesis.speak(utt);
 }
 
 

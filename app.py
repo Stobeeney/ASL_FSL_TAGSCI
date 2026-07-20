@@ -669,10 +669,22 @@ def interpret_signs():
         return jsonify({"ok": False, "error": "No API key provided"}), 400
 
     prompt = (
-        f"You are a sign language interpreter assistant. "
-        f"A user has performed the following sequence of signs: {', '.join(signs)}. "
-        f"Translate this into a natural, grammatically correct English sentence. "
-        f"Be concise. Only reply with the interpreted sentence, nothing else."
+        f"Guidelines:\n"
+        f"1. Fix the syntax: Convert ASL/FSL grammar into standard English Subject-Verb-Object structures.\n"
+        f"2. Add missing words: Sign language often drops articles (a, an, the) and \"to be\" verbs (is, are, am). Add these back in to make the sentence sound natural.\n"
+        f"3. Preserve the tone: Keep the translation appropriate to the context (e.g., a question should sound like a natural question).\n\n"
+        f"Examples:\n"
+        f"- Input (Gloss): \"STORE TOMORROW I GO\"\n"
+        f"- Output: \"I will go to the store tomorrow.\"\n\n"
+        f"- Input (Gloss): \"YOU NAME WHAT?\"\n"
+        f"- Output: \"What is your name?\"\n\n"
+        f"- Input (Gloss): \"YESTERDAY CAR MY BREAK-DOWN\"\n"
+        f"- Output: \"My car broke down yesterday.\"\n\n"
+        f"- Input (Gloss): \"CAT TREE CLIMB FAST\"\n"
+        f"- Output: \"The cat climbed the tree fast.\"\n\n"
+        f"Translate the following ASL/FSL gloss into a natural sentence:\n"
+        f"Input: {' '.join(signs)}\n"
+        f"Output:"
     )
 
     payload = {

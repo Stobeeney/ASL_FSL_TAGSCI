@@ -51,10 +51,14 @@ let handTrackingEnabled = true;
 let faceTrackingEnabled = true;
 
 /* ── Air Button state ── */
-const AIR_BTN = { nx: 0.18, ny: 0.5, radius: 18, dwellMs: 1500 };
+const AIR_BTN = { nx: 0.18, ny: 0.4, radius: 18, dwellMs: 1500 };
 let airState = 'idle';      // 'idle' | 'dwelling_start' | 'recording' | 'dwelling_stop'
 let airDwellAccum = 0;
 let airDwellLast = 0;
+let airClearDwellAccum = 0;
+let airClearDwellLast = 0;
+let airSaveDwellAccum = 0;
+let airSaveDwellLast = 0;
 let airSentence = [];
 let airLastConfirmed = '—';
 let airHandDragging = false; // true while pinch-dragging with hand
@@ -458,7 +462,18 @@ function updateAirButton(handLandmarks) {
   const ch = canvasElement.height;
   const now = performance.now();
 
-  let hovering = false;
+  const bx = AIR_BTN.nx * cw;
+  const by = AIR_BTN.ny * ch;
+
+  // Stack Clear (70px down) and Save (140px down) relative to main button
+  const clear_bx = bx;
+  const clear_by = by + 70;
+  const save_bx = bx;
+  const save_by = by + 140;
+
+  let hoveringMain = false;
+  let hoveringClear = false;
+  let hoveringSave = false;
   let pinching = false;
   let pinchMidX = 0, pinchMidY = 0;
 
@@ -471,7 +486,7 @@ function updateAirButton(handLandmarks) {
     pinchMidX = (thumbX + indexX) / 2;
     pinchMidY = (thumbY + indexY) / 2;
 
-    // Hand size = wrist (0) to middle MCP (9) distance — normalises for depth
+    // Hand size normalization
     const handSize = Math.hypot(
       (handLandmarks[0].x - handLandmarks[9].x) * cw,
       (handLandmarks[0].y - handLandmarks[9].y) * ch
@@ -479,26 +494,33 @@ function updateAirButton(handLandmarks) {
     const pinchDist = Math.hypot(thumbX - indexX, thumbY - indexY);
     pinching = pinchDist < handSize * 0.38;
 
-    const bx = AIR_BTN.nx * cw;
-    const by = AIR_BTN.ny * ch;
-    hovering = Math.hypot(indexX - bx, indexY - by) < AIR_BTN.radius * 1.5;
+    hoveringMain = Math.hypot(indexX - bx, indexY - by) < AIR_BTN.radius * 1.5;
+    hoveringClear = Math.hypot(indexX - clear_bx, indexY - clear_by) < AIR_BTN.radius * 1.5;
+    hoveringSave = Math.hypot(indexX - save_bx, indexY - save_by) < AIR_BTN.radius * 1.5;
   }
-
-  const bx = AIR_BTN.nx * cw;
-  const by = AIR_BTN.ny * ch;
 
   // ── Pinch-to-drag (Tony Stark mode) ──
   if (pinching) {
     const nearBtn = Math.hypot(pinchMidX - bx, pinchMidY - by) < AIR_BTN.radius * 3.5;
     if (!airHandDragging && nearBtn) airHandDragging = true;
     if (airHandDragging) {
+      // Keep within bounds, cap Y-drag so the stack doesn't go below the screen
+      const maxNY = (ch - 180) / ch;
       AIR_BTN.nx = Math.max(0.03, Math.min(0.97, pinchMidX / cw));
-      AIR_BTN.ny = Math.max(0.03, Math.min(0.97, pinchMidY / ch));
+      AIR_BTN.ny = Math.max(0.03, Math.min(maxNY, pinchMidY / ch));
       drawPinchEffect(pinchMidX, pinchMidY);
-      drawAirButton(AIR_BTN.nx * cw, AIR_BTN.ny * ch, 0, false, true);
-      // Reset dwell so it doesn't fire on release
+      
+      // Draw all three buttons stacked
+      drawAirButton(AIR_BTN.nx * cw, AIR_BTN.ny * ch, 0, false, 'start', true);
+      drawAirButton(AIR_BTN.nx * cw, AIR_BTN.ny * ch + 70, 0, false, 'clear', false);
+      drawAirButton(AIR_BTN.nx * cw, AIR_BTN.ny * ch + 140, 0, false, 'save', false);
+
       airDwellAccum = 0;
       airDwellLast = 0;
+      airClearDwellAccum = 0;
+      airClearDwellLast = 0;
+      airSaveDwellAccum = 0;
+      airSaveDwellLast = 0;
       return;
     }
   } else {
@@ -508,8 +530,8 @@ function updateAirButton(handLandmarks) {
     airHandDragging = false;
   }
 
-  // ── Normal dwell / activate logic ──
-  if (hovering) {
+  // ── Dwell / activate logic for Main (Start/Stop Recording) ──
+  if (hoveringMain && !hoveringClear && !hoveringSave) {
     if (airDwellLast > 0) airDwellAccum += now - airDwellLast;
     airDwellLast = now;
   } else {
@@ -520,6 +542,7 @@ function updateAirButton(handLandmarks) {
 
   if (dwellPct >= 1.0) {
     airDwellAccum = 0;
+    airDwellLast = 0;
     if (airState === 'idle' || airState === 'dwelling_start') {
       airState = 'recording';
       airSentence = [];
@@ -530,9 +553,19 @@ function updateAirButton(handLandmarks) {
       airState = 'idle';
       speakAirSentence(sentence);
       showAirOverlay(sentence, true);
+
+      // Append to the main phrase builder buffer
+      if (airSentence.length > 0) {
+        airSentence.forEach(s => {
+          phraseBuffer.push(s);
+          if (phraseBuffer.length > 8) phraseBuffer.shift();
+        });
+        el.phraseBuffer.textContent = phraseBuffer.join(' · ');
+        runLLM();
+      }
     }
   } else {
-    if (hovering) {
+    if (hoveringMain) {
       if (airState === 'idle') airState = 'dwelling_start';
       else if (airState === 'recording') airState = 'dwelling_stop';
     } else {
@@ -541,6 +574,44 @@ function updateAirButton(handLandmarks) {
     }
   }
 
+  // ── Dwell / activate logic for Clear ──
+  if (hoveringClear && !hoveringMain && !hoveringSave) {
+    if (airClearDwellLast > 0) airClearDwellAccum += now - airClearDwellLast;
+    airClearDwellLast = now;
+  } else {
+    airClearDwellAccum = 0;
+    airClearDwellLast = 0;
+  }
+  const clearDwellPct = Math.min(airClearDwellAccum / 1200, 1.0);
+
+  if (clearDwellPct >= 1.0) {
+    airClearDwellAccum = 0;
+    airClearDwellLast = 0;
+    clearPhrase();
+    airSentence = [];
+    showAirOverlay('Cleared Buffer!', true);
+    speakAirSentence("cleared");
+  }
+
+  // ── Dwell / activate logic for Save ──
+  if (hoveringSave && !hoveringMain && !hoveringClear) {
+    if (airSaveDwellLast > 0) airSaveDwellAccum += now - airSaveDwellLast;
+    airSaveDwellLast = now;
+  } else {
+    airSaveDwellAccum = 0;
+    airSaveDwellLast = 0;
+  }
+  const saveDwellPct = Math.min(airSaveDwellAccum / 1200, 1.0);
+
+  if (saveDwellPct >= 1.0) {
+    airSaveDwellAccum = 0;
+    airSaveDwellLast = 0;
+    savePhrase();
+    showAirOverlay('Saved Phrase!', true);
+    speakAirSentence("saved");
+  }
+
+  // Collect confirmed signs while recording
   if (airState === 'recording' || airState === 'dwelling_stop') {
     const s = localState.sign;
     if (s !== '—' && s !== airLastConfirmed) {
@@ -550,7 +621,10 @@ function updateAirButton(handLandmarks) {
     }
   }
 
-  drawAirButton(bx, by, dwellPct, hovering, false);
+  // Draw stack
+  drawAirButton(bx, by, dwellPct, hoveringMain, 'start', false);
+  drawAirButton(clear_bx, clear_by, clearDwellPct, hoveringClear, 'clear', false);
+  drawAirButton(save_bx, save_by, saveDwellPct, hoveringSave, 'save', false);
 }
 
 function drawPinchEffect(px, py) {
@@ -587,7 +661,7 @@ function drawPinchEffect(px, py) {
   ctx.restore();
 }
 
-function drawAirButton(bx, by, dwellPct, hovering, handDragging = false) {
+function drawAirButton(bx, by, dwellPct, hovering, role, handDragging = false) {
   const ctx = canvasCtx;
   const r = AIR_BTN.radius;
   const isRec = airState === 'recording' || airState === 'dwelling_stop';
@@ -595,11 +669,52 @@ function drawAirButton(bx, by, dwellPct, hovering, handDragging = false) {
 
   ctx.save();
 
+  // Set colors and icon based on button role
+  let themeColor = 'rgba(0, 245, 212, 0.3)';
+  let fillColor = 'rgba(0, 20, 18, 0.75)';
+  let strokeColor = '#00f5d4';
+  let icon = '▶';
+  let label = 'HOVER TO START';
+
+  if (role === 'start') {
+    if (isRec) {
+      themeColor = 'rgba(255, 60, 60, 0.4)';
+      fillColor = 'rgba(220, 40, 40, 0.85)';
+      strokeColor = '#ff4444';
+      icon = '■';
+      label = 'HOVER TO STOP';
+    } else {
+      themeColor = 'rgba(0, 245, 212, 0.3)';
+      fillColor = 'rgba(0, 20, 18, 0.75)';
+      strokeColor = '#00f5d4';
+      icon = '▶';
+      label = 'HOVER TO START';
+    }
+    if (isDragging) {
+      themeColor = 'rgba(255, 180, 0, 0.5)';
+      fillColor = 'rgba(220, 140, 0, 0.92)';
+      strokeColor = '#ffb700';
+      icon = '✥';
+      label = 'MOVING…';
+    }
+  } else if (role === 'clear') {
+    themeColor = hovering ? 'rgba(255, 60, 60, 0.5)' : 'rgba(255, 60, 60, 0.15)';
+    fillColor = hovering ? 'rgba(220, 40, 40, 0.92)' : 'rgba(30, 10, 10, 0.8)';
+    strokeColor = hovering ? '#ff4444' : 'rgba(255, 68, 68, 0.5)';
+    icon = '✖';
+    label = 'HOVER TO CLEAR';
+  } else if (role === 'save') {
+    themeColor = hovering ? 'rgba(0, 245, 212, 0.5)' : 'rgba(0, 245, 212, 0.15)';
+    fillColor = hovering ? 'rgba(0, 200, 245, 0.9)' : 'rgba(0, 20, 30, 0.8)';
+    strokeColor = hovering ? '#00f5d4' : 'rgba(0, 245, 212, 0.5)';
+    icon = '💾';
+    label = 'HOVER TO SAVE';
+  }
+
   // Outer glow
   if (hovering || isDragging) {
-    const glowColor = isDragging ? 'rgba(255,180,0,0.5)' : (isRec ? 'rgba(255,60,60,0.4)' : 'rgba(0,245,212,0.3)');
     const glow = ctx.createRadialGradient(bx, by, r, bx, by, r + 22);
-    glow.addColorStop(0, glowColor);
+    glow.addColorStop(0, themeColor);
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.beginPath();
     ctx.arc(bx, by, r + 22, 0, Math.PI * 2);
@@ -610,14 +725,14 @@ function drawAirButton(bx, by, dwellPct, hovering, handDragging = false) {
   // Button fill
   ctx.beginPath();
   ctx.arc(bx, by, r, 0, Math.PI * 2);
-  ctx.fillStyle = isDragging ? 'rgba(220,140,0,0.92)' : (isRec ? 'rgba(220,40,40,0.85)' : 'rgba(0,20,18,0.75)');
+  ctx.fillStyle = fillColor;
   ctx.fill();
-  ctx.strokeStyle = isDragging ? '#ffb700' : (isRec ? '#ff4444' : '#00f5d4');
-  ctx.lineWidth = isDragging ? 3 : 2.5;
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = (hovering || isDragging) ? 3 : 2.5;
   ctx.stroke();
 
-  // Dwell arc (hidden while dragging)
-  if (!isDragging && dwellPct > 0 && dwellPct < 1) {
+  // Dwell arc
+  if (dwellPct > 0 && dwellPct < 1) {
     ctx.beginPath();
     ctx.arc(bx, by, r + 7, -Math.PI / 2, -Math.PI / 2 + dwellPct * Math.PI * 2);
     ctx.strokeStyle = '#ffffff';
@@ -637,18 +752,15 @@ function drawAirButton(bx, by, dwellPct, hovering, handDragging = false) {
   ctx.font = `bold ${Math.round(r * 0.55)}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(isDragging ? '✥' : (isRec ? '■' : '▶'), bx, by);
+  ctx.fillText(icon, bx, by);
 
   // Label below button
-  ctx.font = 'bold 11px sans-serif';
-  ctx.fillStyle = isDragging ? '#ffb700' : (isRec ? '#ff9999' : '#00f5d4');
-  ctx.fillText(
-    isDragging ? 'MOVING…' : (isRec ? 'HOVER TO STOP' : 'HOVER TO START'),
-    bx, by + r + 14
-  );
+  ctx.font = 'bold 9px sans-serif';
+  ctx.fillStyle = strokeColor;
+  ctx.fillText(label, bx, by + r + 14);
 
-  // Sentence preview above button
-  if (!isDragging && (airState === 'recording' || airState === 'dwelling_stop') && airSentence.length > 0) {
+  // Sentence preview above button (Only for Start/Stop button)
+  if (role === 'start' && !isDragging && isRec && airSentence.length > 0) {
     const text = airSentence.join(' · ');
     ctx.font = 'bold 13px monospace';
     ctx.fillStyle = '#00f5d4';

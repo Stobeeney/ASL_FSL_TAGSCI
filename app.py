@@ -706,7 +706,7 @@ def interpret_signs():
         ]
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={urllib.parse.quote(api_key)}"
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-3.5-flash:generateContent?key={urllib.parse.quote(api_key)}"
 
     req = urllib.request.Request(
         url,

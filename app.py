@@ -692,18 +692,24 @@ def interpret_signs():
     )
 
     payload = {
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 200,
-        "messages": [{"role": "user", "content": prompt}]
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ]
     }
 
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+
     req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
+        url,
         data=json.dumps(payload).encode(),
         headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01"
+            "Content-Type": "application/json"
         },
         method="POST"
     )
@@ -711,7 +717,7 @@ def interpret_signs():
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             result = json.loads(resp.read())
-            text = result["content"][0]["text"].strip()
+            text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
             return jsonify({"ok": True, "interpretation": text})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

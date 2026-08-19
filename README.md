@@ -1,59 +1,49 @@
-# EchoLink — ASL / FSL Recognition Platform
+# EchoLink — ASL / FSL Recognition App
 
-Futuristic ASL / FSL sign language recognition application with real-time interpretation.
-This project uses MediaPipe for hand and face tracking, K-Nearest Neighbors for gesture classification, and Google Gemini 1.5 Flash for meaning-based sentence interpretation and auto-correction. It includes both a Flask web dashboard and a Capacitor-based mobile application.
+EchoLink is a futuristic ASL / FSL sign language recognition mobile application with real-time interpretation.
 
-## Features Added
+## 🛠 Tech Stack (APK)
+- **Framework:** Capacitor JS
+- **Frontend UI:** HTML5, CSS3, Vanilla JavaScript
+- **Computer Vision:** Google MediaPipe (Hand & Face Tracking)
+- **Machine Learning (Classification):** K-Nearest Neighbors (KNN) algorithm running offline
+- **Natural Language Processing (AI):** Google Gemini 1.5 Flash (Meaning-Based Translation & Auto-Correction)
+- **Text-to-Speech:** Capacitor Native Community TTS Plugin
+- **Local Database:** IndexedDB (for massive dataset storage)
+- **Build Tool:** Gradle (Java 21) via Android Studio
 
-* **Offline-First Capabilities:** Core classification works locally via `offline_backend.js` using a built-in KNN model.
-* **Meaning-Based Translation:** The app uses Google Gemini to translate sequences of disjointed signs (like "STORE TOMORROW I GO") into grammatically correct sentences (like "I will go to the store tomorrow.").
-* **Auto-Correction:** Rapid fingerspelling errors (e.g. "H", "E", "L", "O") are automatically corrected to meaningful words ("Hello") by the AI.
-* **Native Text-to-Speech:** Uses Capacitor's native TTS plugin to seamlessly narrate interpreted gestures without browser mobile constraints.
-* **Live Performance Metrics:** Real-time Word Error Rate (WER) and BLEU Score metrics calculated based on prediction distance confidence.
-* **Anti-Jitter Filtering:** Implementation of consecutive sign debouncing and a strict >40% confidence threshold to prevent inaccurate tracking noise.
-* **Low-End Mobile Optimizations:** Disabled heavy WebGL grid stroking and Canvas operations to allow smooth 30+ FPS operation on lower-tier Android devices.
+## 🚀 How to Run the APK (Build from source)
 
-## Quick start (Web)
+If you are a developer and want to build the APK from the source code, follow these steps:
 
-```bash
-# 1. Create & activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+1. Navigate to the mobile app directory:
+   ```bash
+   cd mobile_app
+   ```
+2. Install NodeJS dependencies:
+   ```bash
+   npm install
+   ```
+3. Sync the web assets into the Android native folder:
+   ```bash
+   npx cap sync android
+   ```
+4. Set your Java Environment (requires Java 21) and compile the debug APK:
+   ```bash
+   export JAVA_HOME=$HOME/.jdks/jbr-21.0.11
+   cd android
+   ./gradlew assembleDebug
+   ```
 
-# 2. Install dependencies
-pip install -r requirements.txt
+The compiled application will be generated at:
+`mobile_app/android/app/build/outputs/apk/debug/app-debug.apk`
 
-# 3. Run the server
-python app.py
-```
-Open **http://localhost:5000** in your browser.
+## 📱 How to Install the APK on your Phone
 
-## Quick start (Android Mobile)
-
-```bash
-cd mobile_app
-npm install
-
-# 1. Sync web assets to Android
-npx cap sync android
-
-# 2. Build APK (Requires Java 21)
-export JAVA_HOME=$HOME/.jdks/jbr-21.0.11
-cd android
-./gradlew assembleDebug
-```
-The APK will be available in `mobile_app/android/app/build/outputs/apk/debug/app-debug.apk`.
-
-## Project structure
-
-```
-ASL_FSL_TAGSCI/
-├── app.py                  ← Flask server 
-├── templates/              ← Web templates
-├── static/                 ← Web static assets
-└── mobile_app/             ← Capacitor Mobile Project
-    ├── www/                ← Mobile web bundle (HTML/CSS/JS)
-    │   ├── js/main.js             ← Core tracking & TTS logic
-    │   └── js/offline_backend.js  ← KNN and Gemini integration
-    └── android/            ← Native Android project
-```
+1. Transfer the `app-debug.apk` file to your Android phone (via USB, Google Drive, Bluetooth, or Email).
+2. Open the **File Manager** on your phone and locate the downloaded `.apk` file.
+3. Tap the file to install it.
+4. *Note:* If your phone shows a "Install unknown apps" warning, tap **Settings** and toggle **"Allow from this source"**.
+5. Once installed, open the **EchoLink** app.
+6. Make sure to provide Camera permissions when prompted for the hand-tracking to work!
+7. *(Optional)* Paste your Gemini API key in the AI panel to enable the Meaning-Based AI translations.

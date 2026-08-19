@@ -457,7 +457,7 @@ def download_db():
 def import_dataset():
     """Merge records from an exported JSON into the current database."""
     data = request.get_json(force=True)
-    records = data if isinstance(data, list) else data.get('records', [])
+    records = data if isinstance(data, list) else (data.get('records') or data.get('samples') or data.get('data') or [])
     if not records:
         return jsonify({"ok": False, "error": "No records provided"}), 400
 
@@ -468,9 +468,9 @@ def import_dataset():
             execute_query(
                 conn,
                 "INSERT INTO samples (label, mode, capture_type, landmarks, frame_count, created_at) VALUES (?,?,?,?,?,?)",
-                (r['label'], r.get('mode', 'ASL'), r.get('type', 'gesture'),
-                 json.dumps(r['landmarks']), r.get('frame_count', 1),
-                 r.get('created_at', '')),
+                (r.get('label', 'Imported'), r.get('mode', 'ASL'), r.get('type', r.get('capture_type', 'gesture')),
+                 json.dumps(r.get('landmarks', [])), r.get('frames', r.get('frame_count', 1)),
+                 r.get('created_at', str(datetime.now()))),
                 commit=True
             )
             imported += 1
@@ -761,4 +761,4 @@ def interpret_signs():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

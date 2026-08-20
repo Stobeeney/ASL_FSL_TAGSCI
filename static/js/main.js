@@ -1354,7 +1354,9 @@ function renderDataset(data = null) {
   }
   if (el.datasetEmpty) el.datasetEmpty.style.display = 'none';
   if (el.datasetTableBody) {
-    el.datasetTableBody.innerHTML = rows.map(r => `
+    // Limit to 100 items to prevent severe lag on mobile
+    const displayRows = rows.slice(0, 100);
+    let html = displayRows.map(r => `
       <tr>
         <td class="dt-id">#${r.id}</td>
         <td class="dt-label">${r.label}</td>
@@ -1368,6 +1370,11 @@ function renderDataset(data = null) {
         </td>
       </tr>
     `).join('');
+    
+    if (rows.length > 100) {
+       html += `<tr><td colspan="7" style="text-align:center;padding:15px;color:#888;">Showing top 100 samples to prevent lag. Use the search bar to find others.</td></tr>`;
+    }
+    el.datasetTableBody.innerHTML = html;
   }
 }
 
@@ -1418,19 +1425,27 @@ async function deleteAllSamples() {
 async function deleteSample(id, btn) {
 
 async function deleteClass() {
-  const label = prompt('Enter the exact label of the class you want to delete:');
-  if (!label || !label.trim()) return;
-  if (!confirm(`Are you sure you want to delete ALL samples for "${label.trim()}"?`)) return;
+  let searchInput = document.getElementById('datasetSearch');
+  let label = searchInput ? searchInput.value.trim().toUpperCase() : '';
+  
+  if (!label) {
+    alert('Para mag-delete ng buong class, i-type muna ang pangalan ng class (halimbawa "A") sa Search bar, tapos pindutin ulit ang Delete Class.');
+    if (searchInput) searchInput.focus();
+    return;
+  }
+  
+  if (!confirm(`Are you sure you want to delete ALL samples for "${label}"?`)) return;
   
   try {
     const res = await fetch('/api/dataset/delete_class', { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: label.trim() })
+      body: JSON.stringify({ label: label })
     });
     const data = await res.json();
     if (data.ok) {
-      alert(`✅ Deleted ${data.deleted} samples for class "${label.trim()}".`);
+      alert(`✅ Deleted ${data.deleted} samples for class "${label}".`);
+      if (searchInput) searchInput.value = '';
       loadDataset();
     } else {
       alert('Error: ' + data.error);

@@ -345,10 +345,10 @@
         }
 
         if (urlStr.includes('/api/dataset/delete_class')) {
-          const targetLabel = bodyData.label;
+          const targetLabel = String(bodyData.label).toUpperCase().trim();
           let samples = getLocalSamples();
           const initialCount = samples.length;
-          samples = samples.filter(s => s.label !== targetLabel);
+          samples = samples.filter(s => String(s.label).toUpperCase().trim() !== targetLabel);
           const deletedCount = initialCount - samples.length;
           await saveAllToDB(samples);
           return new Response(JSON.stringify({ ok: true, deleted: deletedCount }), { status: 200, headers: {'Content-Type': 'application/json'} });

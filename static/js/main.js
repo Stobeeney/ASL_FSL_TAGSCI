@@ -1436,6 +1436,11 @@ async function deleteClass() {
   
   if (!confirm(`Are you sure you want to delete ALL samples for "${label}"?`)) return;
   
+  const loadingOverlay = document.createElement('div');
+  loadingOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;z-index:99999;';
+  loadingOverlay.innerHTML = `<div>⏳ Deleting all "${label}"... Please wait...</div>`;
+  document.body.appendChild(loadingOverlay);
+
   try {
     const res = await fetch('/api/dataset/delete_class', { 
       method: 'POST',
@@ -1443,14 +1448,18 @@ async function deleteClass() {
       body: JSON.stringify({ label: label })
     });
     const data = await res.json();
+    document.body.removeChild(loadingOverlay);
     if (data.ok) {
       alert(`✅ Deleted ${data.deleted} samples for class "${label}".`);
-      if (searchInput) searchInput.value = '';
+      if (searchInput) {
+         searchInput.value = '';
+      }
       loadDataset();
     } else {
       alert('Error: ' + data.error);
     }
   } catch (e) {
+    if (document.body.contains(loadingOverlay)) document.body.removeChild(loadingOverlay);
     alert('Error deleting class');
   }
 }

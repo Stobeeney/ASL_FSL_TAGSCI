@@ -259,8 +259,10 @@
                 `Idea (meaning): "I will go to the store tomorrow."\n` +
                 `The main idea of the sentence will be seen by the users, not the words itself.\n` +
                 `(IT IS IMPORTANT TO FOCUS ON MEANING-BASED TRANSLATION)\n` +
+                `Ensure the final output has proper English grammar by naturally adding necessary connecting words, prepositions, and articles (e.g., "is", "to", "the", "a", "are") that are typically omitted in sign language.\n` +
                 `Also, if the input is a sequence of letters spelling a word (e.g. B A D), output the combined word (e.g. Bad). If the spelling is slightly wrong or missing letters (e.g. H E L O), auto-correct it to the nearest real word (e.g. Hello).\n` +
-                `CRITICAL RULE: Respond ONLY with the final translated text. DO NOT include prefixes like "Idea (meaning):" or "Output:". DO NOT explain yourself.\n` +
+                `CRITICAL RULE 1: If the input is just a single letter or random letters that do not form a word, DO NOT expand them into abbreviations (e.g., do NOT turn "C" into "Circa"). Just return the letters exactly as they are.\n` +
+                `CRITICAL RULE 2: Respond ONLY with the final translated text. DO NOT include prefixes like "Idea (meaning):" or "Output:". DO NOT explain yourself.\n` +
                 `Input: ${signs.join(' ')}\nOutput:`;
 
               const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
@@ -340,6 +342,16 @@
         if (urlStr.includes('/api/dataset/delete_all')) {
           await saveAllToDB([]);
           return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
+        }
+
+        if (urlStr.includes('/api/dataset/delete_class')) {
+          const targetLabel = bodyData.label;
+          let samples = getLocalSamples();
+          const initialCount = samples.length;
+          samples = samples.filter(s => s.label !== targetLabel);
+          const deletedCount = initialCount - samples.length;
+          await saveAllToDB(samples);
+          return new Response(JSON.stringify({ ok: true, deleted: deletedCount }), { status: 200, headers: {'Content-Type': 'application/json'} });
         }
 
         if (urlStr.includes('/api/dataset/delete/')) {

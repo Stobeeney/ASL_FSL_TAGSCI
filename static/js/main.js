@@ -398,8 +398,13 @@ function applyPayload(data) {
       if (phraseBuffer.length > 8) phraseBuffer.shift();
       el.phraseBuffer.textContent = phraseBuffer.join(' · ');
 
-      runLLM();
       speakSign(sign);
+
+      // Debounce LLM so it waits 2 seconds before translating and clearing the buffer
+      if (window._llmDebounceTimer) clearTimeout(window._llmDebounceTimer);
+      window._llmDebounceTimer = setTimeout(() => {
+        runLLM();
+      }, 2000);
 
       sampleCount++;
       el.statSamples.textContent = sampleCount;
@@ -979,10 +984,6 @@ async function runLLM() {
   if ($('llmText').textContent === 'Thinking...') return;
 
   const apiKey = ($('llmApiKey') ? $('llmApiKey').value.trim() : '');
-  if (!apiKey) {
-    $('llmText').textContent = '⚠ Enter your Anthropic API key above to enable AI interpretation.';
-    return;
-  }
 
   $('llmText').textContent = 'Thinking...';
 
@@ -1415,6 +1416,29 @@ async function deleteAllSamples() {
 }
 
 async function deleteSample(id, btn) {
+
+async function deleteClass() {
+  const label = prompt('Enter the exact label of the class you want to delete:');
+  if (!label || !label.trim()) return;
+  if (!confirm(`Are you sure you want to delete ALL samples for "${label.trim()}"?`)) return;
+  
+  try {
+    const res = await fetch('/api/dataset/delete_class', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: label.trim() })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`✅ Deleted ${data.deleted} samples for class "${label.trim()}".`);
+      loadDataset();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  } catch (e) {
+    alert('Error deleting class');
+  }
+}
   if (btn) btn.disabled = true;
   try {
     await fetch(`/api/dataset/delete/${id}`, { method: 'DELETE' });
@@ -1427,39 +1451,47 @@ async function deleteSample(id, btn) {
 async function exportDataset() {
   try {
     const res = await fetch('/api/dataset/export');
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) {
+    const jsonStr = await res.text();
+    if (!jsonStr || jsonStr === '[]' || jsonStr.length < 5) {
       alert('Dataset is empty — capture or import some signs first!');
       return;
     }
 
-    const jsonStr = JSON.stringify(data, null, 2);
     const fileName = `signstudy_dataset_${Date.now()}.json`;
 
-    // 1. Try Native Capacitor Filesystem Write to DOWNLOADS Folder
+    const exportOverlay = document.createElement('div');
+    exportOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;z-index:99999;';
+    exportOverlay.innerHTML = '<div>⏳ Exporting Dataset... Please wait...</div>';
+    document.body.appendChild(exportOverlay);
+
+    // 1. Try Native Capacitor Filesystem Write (Chunked to prevent JNI OOM)
     let nativeSaved = false;
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) {
       try {
         const fs = window.Capacitor.Plugins.Filesystem;
+        const chunkSize = 250000; // 250kb per chunk
+        
+        // Write first chunk to create/overwrite file
         await fs.writeFile({
           path: fileName,
-          data: jsonStr,
-          directory: 'DOWNLOADS',
+          data: jsonStr.substring(0, chunkSize),
+          directory: 'DOCUMENTS',
           encoding: 'utf-8'
         });
-        nativeSaved = true;
-      } catch (fsErr) {
-        console.warn('[Filesystem Plugin] DOWNLOADS directory error, trying DOCUMENTS:', fsErr);
-        try {
-          const fs = window.Capacitor.Plugins.Filesystem;
-          await fs.writeFile({
+        
+        // Append remaining chunks
+        for (let i = chunkSize; i < jsonStr.length; i += chunkSize) {
+          exportOverlay.innerHTML = `<div>⏳ Exporting... ${Math.round((i/jsonStr.length)*100)}%</div>`;
+          await fs.appendFile({
             path: fileName,
-            data: jsonStr,
+            data: jsonStr.substring(i, i + chunkSize),
             directory: 'DOCUMENTS',
             encoding: 'utf-8'
           });
-          nativeSaved = true;
-        } catch(e) {}
+        }
+        nativeSaved = true;
+      } catch (fsErr) {
+        console.warn('[Filesystem Plugin] DOCUMENTS error, skipping native save', fsErr);
       }
     }
 
@@ -1474,17 +1506,14 @@ async function exportDataset() {
       a.click();
       document.body.removeChild(a);
     }
-
-    // Backup: Copy to clipboard
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(jsonStr);
-      }
-    } catch(e) {}
+    
+    document.body.removeChild(exportOverlay);
 
     // Confirmation Alert
-    alert(`✅ DATASET EXPORTED TO DOWNLOADS!\n\n• Total Samples: ${data.length}\n• File Name: ${fileName}\n\nNaka-save na ang kumpletong dataset JSON file sa Downloads folder ng phone mo!`);
+    alert(`✅ DATASET SUCCESSFULLY EXPORTED!\n\n• File Name: ${fileName}\n\nNaka-save na ang JSON file sa "Documents" folder ng phone mo! Gamitin ang File Manager app at pumunta sa Documents.`);
   } catch(err) {
+    const overlay = document.querySelector('div[style*="z-index:99999"]');
+    if (overlay) document.body.removeChild(overlay);
     alert('Export failed: ' + (err ? err.message : 'Unknown error'));
   }
 }
@@ -1892,11 +1921,6 @@ function toggleSentenceRecording() {
     const sentence = airSentence.join(' ');
     airState = 'idle';
     showAirOverlay(sentence, true);
-
-    // Unlock audio context for the upcoming delayed AI speech
-    if (voiceOutputEnabled) {
-      speakText("Generating", 0.5);
-    }
     
     document.querySelectorAll('.btn-sentence').forEach(b => {
       b.textContent = 'Tap to Start the Sentence';

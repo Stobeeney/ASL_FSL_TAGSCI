@@ -1422,7 +1422,16 @@ async function deleteAllSamples() {
   }
 }
 
+
 async function deleteSample(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await fetch(`/api/dataset/delete/${id}`, { method: 'DELETE' });
+    await loadDataset();
+  } catch {
+    if (btn) btn.disabled = false;
+  }
+}
 
 async function deleteClass() {
   let searchInput = document.getElementById('datasetSearch');
@@ -1440,6 +1449,9 @@ async function deleteClass() {
   loadingOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;z-index:99999;';
   loadingOverlay.innerHTML = `<div>⏳ Deleting all "${label}"... Please wait...</div>`;
   document.body.appendChild(loadingOverlay);
+
+  // Add an intentional delay so the browser has time to render the loading screen
+  await new Promise(r => setTimeout(r, 500));
 
   try {
     const res = await fetch('/api/dataset/delete_class', { 
@@ -1463,15 +1475,6 @@ async function deleteClass() {
     alert('Error deleting class');
   }
 }
-  if (btn) btn.disabled = true;
-  try {
-    await fetch(`/api/dataset/delete/${id}`, { method: 'DELETE' });
-    await loadDataset();
-  } catch {
-    if (btn) btn.disabled = false;
-  }
-}
-
 async function exportDataset() {
   try {
     const res = await fetch('/api/dataset/export');

@@ -1546,17 +1546,22 @@ async function exportDataset() {
 }
 
 
+
 function closeImportModal() {
+  const modal = document.getElementById('importModal');
+  if (modal) modal.style.display = 'none';
+}
+
 async function importDataset(input) {
   const file = input && input.files && input.files[0];
   if (!file) return;
 
-  const modal = $('importModal');
-  const title = $('importModalTitle');
-  const sub = $('importModalSub');
-  const pBar = $('importProgressBar');
-  const counter = $('importCounter');
-  const closeBtn = $('importCloseBtn');
+  const modal = document.getElementById('importModal');
+  const title = document.getElementById('importModalTitle');
+  const sub = document.getElementById('importModalSub');
+  const pBar = document.getElementById('importProgressBar');
+  const counter = document.getElementById('importCounter');
+  const closeBtn = document.getElementById('importCloseBtn');
   const icon = document.querySelector('.import-icon');
   const spinner = document.querySelector('.import-spinner');
 
@@ -1681,11 +1686,6 @@ async function importDataset(input) {
     alert('Import Error: ' + err.message);
   }
 }
-  const modal = $('importModal');
-  if (modal) modal.style.display = 'none';
-}
-
-
 /* ═══════════════════════════════════════
    DATASET PLAYBACK ENGINE
    ═══════════════════════════════════════ */

@@ -373,9 +373,11 @@
           if (Array.isArray(records) && records.length) {
             let samples = getLocalSamples();
             let startId = samples.length ? Math.max(...samples.map(s => s.id || 0)) + 1 : 1;
+            
+            const newSamples = [];
             records.forEach(r => {
               const frameCnt = r.frames || r.frame_count || (Array.isArray(r.landmarks && r.landmarks[0]) ? r.landmarks.length : 1);
-              samples.push({
+              const newObj = {
                 id: startId++,
                 label: r.label || 'Imported',
                 mode: r.mode || 'ASL',
@@ -383,9 +385,28 @@
                 frames: frameCnt,
                 created_at: r.created_at || new Date().toLocaleString(),
                 landmarks: r.landmarks || []
-              });
+              };
+              samples.push(newObj);
+              newSamples.push(newObj);
             });
-            await saveAllToDB(samples);
+            
+            cachedSamples = samples;
+            
+            // Append directly to IndexedDB without clearing to prevent O(N^2) crash on large imports
+            if (db) {
+              await new Promise((resolve) => {
+                try {
+                  const tx = db.transaction(STORE_NAME, 'readwrite');
+                  const store = tx.objectStore(STORE_NAME);
+                  newSamples.forEach(s => store.put(s));
+                  tx.oncomplete = () => resolve(true);
+                  tx.onerror = () => resolve(false);
+                } catch (e) {
+                  resolve(false);
+                }
+              });
+            }
+            
             return new Response(JSON.stringify({ ok: true, imported: records.length }), { status: 200, headers: {'Content-Type': 'application/json'} });
           }
           return new Response(JSON.stringify({ ok: false, error: 'No records found' }), { status: 400, headers: {'Content-Type': 'application/json'} });

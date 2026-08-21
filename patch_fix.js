@@ -1,52 +1,134 @@
-async function deleteSample(id, btn) {
-  if (btn) btn.disabled = true;
-  try {
-    await fetch(`/api/dataset/delete/${id}`, { method: 'DELETE' });
-    await loadDataset();
-  } catch {
-    if (btn) btn.disabled = false;
-  }
-}
+async function importDataset(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
 
-async function deleteClass() {
-  let searchInput = document.getElementById('datasetSearch');
-  let label = searchInput ? searchInput.value.trim().toUpperCase() : '';
-  
-  if (!label) {
-    alert('Para mag-delete ng buong class, i-type muna ang pangalan ng class (halimbawa "A") sa Search bar, tapos pindutin ulit ang Delete Class.');
-    if (searchInput) searchInput.focus();
-    return;
-  }
-  
-  if (!confirm(`Are you sure you want to delete ALL samples for "${label}"?`)) return;
-  
-  const loadingOverlay = document.createElement('div');
-  loadingOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.5rem;z-index:99999;';
-  loadingOverlay.innerHTML = `<div>⏳ Deleting all "${label}"... Please wait...</div>`;
-  document.body.appendChild(loadingOverlay);
+  const modal = $('importModal');
+  const title = $('importModalTitle');
+  const sub = $('importModalSub');
+  const pBar = $('importProgressBar');
+  const counter = $('importCounter');
+  const closeBtn = $('importCloseBtn');
+  const icon = document.querySelector('.import-icon');
+  const spinner = document.querySelector('.import-spinner');
 
-  // Add an intentional delay so the browser has time to render the loading screen
-  await new Promise(r => setTimeout(r, 500));
+  if (modal) modal.style.display = 'flex';
+  if (title) title.textContent = 'Reading JSON File...';
+  if (sub) sub.textContent = `File: ${file.name}`;
+  if (pBar) pBar.style.width = '5%';
+  if (counter) counter.textContent = 'Preparing streaming import...';
+  if (closeBtn) closeBtn.style.display = 'none';
+  if (spinner) spinner.style.display = 'block';
+  if (icon) icon.textContent = '📥';
 
   try {
-    const res = await fetch('/api/dataset/delete_class', { 
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: label })
-    });
-    const data = await res.json();
-    document.body.removeChild(loadingOverlay);
-    if (data.ok) {
-      alert(`✅ Deleted ${data.deleted} samples for class "${label}".`);
-      if (searchInput) {
-         searchInput.value = '';
-      }
-      loadDataset();
-    } else {
-      alert('Error: ' + data.error);
+    const FILE_SIZE = file.size;
+    const CHUNK_SIZE = 512 * 1024; // 512 KB chunks for memory safety
+    let offset = 0;
+    let buffer = '';
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+    let objectStart = -1;
+    let totalImported = 0;
+    
+    // IMPORTANT FIX: Maintain pointer `i` globally across chunks so we don't rescan unfinished strings!
+    let i = 0; 
+
+    let batch = [];
+    const BATCH_LIMIT = 50; // Increased to 50 for faster imports
+
+    async function flushBatch() {
+      if (batch.length === 0) return;
+      const res = await fetch('/api/dataset/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batch)
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Import failed');
+      totalImported += (data.imported !== undefined ? data.imported : batch.length);
+      batch = [];
     }
-  } catch (e) {
-    if (document.body.contains(loadingOverlay)) document.body.removeChild(loadingOverlay);
-    alert('Error deleting class');
+
+    while (offset < FILE_SIZE) {
+      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      const text = await slice.text();
+      buffer += text;
+      offset += CHUNK_SIZE;
+
+      if (title) title.textContent = 'Importing & Merging Dataset...';
+      const progressPct = Math.min(100, Math.round((offset / FILE_SIZE) * 100));
+      if (pBar) pBar.style.width = `${progressPct}%`;
+      if (sub) sub.textContent = `Processing file chunk... ${progressPct}%`;
+      if (counter) counter.textContent = `${totalImported} samples imported so far`;
+
+      while (i < buffer.length) {
+        const char = buffer[i];
+        if (escapeNext) {
+          escapeNext = false;
+          i++;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+        } else if (char === '\\' && inString) {
+          escapeNext = true;
+        } else if (!inString) {
+          if (char === '{') {
+            if (depth === 0) objectStart = i;
+            depth++;
+          } else if (char === '}') {
+            depth--;
+            if (depth === 0 && objectStart !== -1) {
+              const objStr = buffer.substring(objectStart, i + 1);
+              try {
+                batch.push(JSON.parse(objStr));
+              } catch(e) {
+                console.error("Skipped malformed object");
+              }
+              // Truncate buffer to free memory and reset pointers
+              buffer = buffer.substring(i + 1);
+              i = -1; 
+              objectStart = -1;
+
+              if (batch.length >= BATCH_LIMIT) {
+                await flushBatch();
+                if (counter) counter.textContent = `${totalImported} samples imported so far`;
+              }
+            }
+          }
+        }
+        i++;
+      }
+    }
+    
+    // Flush remaining
+    await flushBatch();
+
+    // Success State Animation
+    if (title) title.textContent = 'Import Complete!';
+    if (sub) sub.textContent = 'Dataset has been merged successfully.';
+    if (pBar) pBar.style.width = '100%';
+    if (pBar) pBar.style.background = '#4cd964';
+    if (counter) counter.textContent = `Total Imported: ${totalImported}`;
+    if (spinner) spinner.style.display = 'none';
+    if (icon) icon.textContent = '✅';
+    if (closeBtn) {
+      closeBtn.style.display = 'inline-block';
+      closeBtn.textContent = 'Finish';
+    }
+
+    if (input) input.value = '';
+    loadDataset();
+
+  } catch(err) {
+    if (title) title.textContent = 'Import Failed';
+    if (sub) sub.textContent = err.message || 'Unknown error occurred.';
+    if (spinner) spinner.style.display = 'none';
+    if (icon) icon.textContent = '❌';
+    if (pBar) pBar.style.background = '#ff3b30';
+    if (closeBtn) closeBtn.style.display = 'inline-block';
+    if (input) input.value = '';
+    alert('Import Error: ' + err.message);
   }
 }

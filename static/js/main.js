@@ -1546,6 +1546,7 @@ async function exportDataset() {
 }
 
 
+function closeImportModal() {
 async function importDataset(input) {
   const file = input && input.files && input.files[0];
   if (!file) return;
@@ -1578,9 +1579,12 @@ async function importDataset(input) {
     let escapeNext = false;
     let objectStart = -1;
     let totalImported = 0;
+    
+    // IMPORTANT FIX: Maintain pointer `i` globally across chunks so we don't rescan unfinished strings!
+    let i = 0; 
 
     let batch = [];
-    const BATCH_LIMIT = 25;
+    const BATCH_LIMIT = 50; // Increased to 50 for faster imports
 
     async function flushBatch() {
       if (batch.length === 0) return;
@@ -1607,7 +1611,6 @@ async function importDataset(input) {
       if (sub) sub.textContent = `Processing file chunk... ${progressPct}%`;
       if (counter) counter.textContent = `${totalImported} samples imported so far`;
 
-      let i = 0;
       while (i < buffer.length) {
         const char = buffer[i];
         if (escapeNext) {
@@ -1632,6 +1635,7 @@ async function importDataset(input) {
               } catch(e) {
                 console.error("Skipped malformed object");
               }
+              // Truncate buffer to free memory and reset pointers
               buffer = buffer.substring(i + 1);
               i = -1; 
               objectStart = -1;
@@ -1677,7 +1681,6 @@ async function importDataset(input) {
     alert('Import Error: ' + err.message);
   }
 }
-function closeImportModal() {
   const modal = $('importModal');
   if (modal) modal.style.display = 'none';
 }

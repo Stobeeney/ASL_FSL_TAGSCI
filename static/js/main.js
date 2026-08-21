@@ -1545,6 +1545,7 @@ async function exportDataset() {
   }
 }
 
+
 async function importDataset(input) {
   const file = input && input.files && input.files[0];
   if (!file) return;
@@ -1562,79 +1563,120 @@ async function importDataset(input) {
   if (title) title.textContent = 'Reading JSON File...';
   if (sub) sub.textContent = `File: ${file.name}`;
   if (pBar) pBar.style.width = '5%';
-  if (counter) counter.textContent = 'Preparing import...';
+  if (counter) counter.textContent = 'Preparing streaming import...';
   if (closeBtn) closeBtn.style.display = 'none';
   if (spinner) spinner.style.display = 'block';
   if (icon) icon.textContent = '📥';
 
   try {
-    const text = await file.text();
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch(err) {
-      alert('Invalid JSON file — formatting error in file.');
-      if (modal) modal.style.display = 'none';
-      return;
-    }
-
-    let records = Array.isArray(parsed) ? parsed : (parsed.records || parsed.samples || parsed.data || []);
-    if (!Array.isArray(records) || records.length === 0) {
-      alert('No valid gesture records found in this JSON file.');
-      if (modal) modal.style.display = 'none';
-      return;
-    }
-
-    if (title) title.textContent = 'Importing & Merging Dataset...';
-    
-    const totalRecords = records.length;
-    const CHUNK_SIZE = 25;
+    const FILE_SIZE = file.size;
+    const CHUNK_SIZE = 512 * 1024; // 512 KB chunks for memory safety
+    let offset = 0;
+    let buffer = '';
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+    let objectStart = -1;
     let totalImported = 0;
 
-    for (let i = 0; i < totalRecords; i += CHUNK_SIZE) {
-      const chunk = records.slice(i, i + CHUNK_SIZE);
+    let batch = [];
+    const BATCH_LIMIT = 25;
+
+    async function flushBatch() {
+      if (batch.length === 0) return;
       const res = await fetch('/api/dataset/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(chunk)
+        body: JSON.stringify(batch)
       });
       const data = await res.json();
-      if (!data.ok) {
-        alert(`Import failed at batch ${Math.floor(i / CHUNK_SIZE) + 1}: ` + (data.error || 'unknown error'));
-        if (modal) modal.style.display = 'none';
-        return;
-      }
-      
-      const added = (data.imported !== undefined ? data.imported : chunk.length);
-      totalImported += added;
-      const pct = Math.min(100, Math.round((totalImported / totalRecords) * 100));
-
-      if (pBar) pBar.style.width = `${pct}%`;
-      if (counter) counter.textContent = `${totalImported} / ${totalRecords} samples imported`;
-      if (sub) sub.textContent = `Merging batch ${Math.ceil((i + CHUNK_SIZE) / CHUNK_SIZE)} of ${Math.ceil(totalRecords / CHUNK_SIZE)}...`;
-
-      // Short delay for smooth visual feedback
-      await new Promise(r => setTimeout(r, 60));
+      if (!data.ok) throw new Error(data.error || 'Import failed');
+      totalImported += (data.imported !== undefined ? data.imported : batch.length);
+      batch = [];
     }
 
+    while (offset < FILE_SIZE) {
+      const slice = file.slice(offset, offset + CHUNK_SIZE);
+      const text = await slice.text();
+      buffer += text;
+      offset += CHUNK_SIZE;
+
+      if (title) title.textContent = 'Importing & Merging Dataset...';
+      const progressPct = Math.min(100, Math.round((offset / FILE_SIZE) * 100));
+      if (pBar) pBar.style.width = `${progressPct}%`;
+      if (sub) sub.textContent = `Processing file chunk... ${progressPct}%`;
+      if (counter) counter.textContent = `${totalImported} samples imported so far`;
+
+      let i = 0;
+      while (i < buffer.length) {
+        const char = buffer[i];
+        if (escapeNext) {
+          escapeNext = false;
+          i++;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+        } else if (char === '\\' && inString) {
+          escapeNext = true;
+        } else if (!inString) {
+          if (char === '{') {
+            if (depth === 0) objectStart = i;
+            depth++;
+          } else if (char === '}') {
+            depth--;
+            if (depth === 0 && objectStart !== -1) {
+              const objStr = buffer.substring(objectStart, i + 1);
+              try {
+                batch.push(JSON.parse(objStr));
+              } catch(e) {
+                console.error("Skipped malformed object");
+              }
+              buffer = buffer.substring(i + 1);
+              i = -1; 
+              objectStart = -1;
+
+              if (batch.length >= BATCH_LIMIT) {
+                await flushBatch();
+                if (counter) counter.textContent = `${totalImported} samples imported so far`;
+              }
+            }
+          }
+        }
+        i++;
+      }
+    }
+    
+    // Flush remaining
+    await flushBatch();
+
     // Success State Animation
+    if (title) title.textContent = 'Import Complete!';
+    if (sub) sub.textContent = 'Dataset has been merged successfully.';
     if (pBar) pBar.style.width = '100%';
+    if (pBar) pBar.style.background = '#4cd964';
+    if (counter) counter.textContent = `Total Imported: ${totalImported}`;
     if (spinner) spinner.style.display = 'none';
     if (icon) icon.textContent = '✅';
-    if (title) title.textContent = 'Import Successful!';
-    if (sub) sub.textContent = `Successfully added ${totalImported} new sample${totalImported !== 1 ? 's' : ''} to your dataset!`;
-    if (counter) counter.textContent = `Total Imported: ${totalImported} samples`;
-    if (closeBtn) closeBtn.style.display = 'block';
+    if (closeBtn) {
+      closeBtn.style.display = 'inline-block';
+      closeBtn.textContent = 'Finish';
+    }
 
-    await loadDataset();
-  } catch (e) {
-    alert('Import failed: ' + (e ? e.message : 'Unknown error'));
-    if (modal) modal.style.display = 'none';
-  } finally {
     if (input) input.value = '';
+    loadDataset();
+
+  } catch(err) {
+    if (title) title.textContent = 'Import Failed';
+    if (sub) sub.textContent = err.message || 'Unknown error occurred.';
+    if (spinner) spinner.style.display = 'none';
+    if (icon) icon.textContent = '❌';
+    if (pBar) pBar.style.background = '#ff3b30';
+    if (closeBtn) closeBtn.style.display = 'inline-block';
+    if (input) input.value = '';
+    alert('Import Error: ' + err.message);
   }
 }
-
 function closeImportModal() {
   const modal = $('importModal');
   if (modal) modal.style.display = 'none';
